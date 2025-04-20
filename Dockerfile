@@ -44,6 +44,7 @@ RUN apt-get update && apt-get install -y \
 # Install rust and tools
 RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
 ENV PATH="/root/.cargo/bin:${PATH}"
+# . "$HOME/.cargo/env"
 RUN rustup install nightly && rustup default nightly
 
 RUN git clone --depth 1 --branch "v0.6.0" https://github.com/0xricksanchez/AFL_Runner.git
@@ -54,6 +55,7 @@ RUN mkdir -p /root/.config/tmux/ && \
 # Clone AFLplusplus and build
 ENV LLVM_CONFIG=llvm-config-${LLVM_V}
 RUN git clone https://github.com/AFLplusplus/AFLplusplus
+# Used make distrib since gcc wasn't installed.
 RUN cd AFLplusplus && make PERFORMANCE=1 install -j$(nproc --ignore 1)
 
 # Build qemu-nyx and libnyx
@@ -88,6 +90,7 @@ COPY ./target-patches/bitcoin-core-rng.patch bitcoin/
 RUN cd bitcoin/ && \
       git apply bitcoin-core-rng.patch
 
+# No ASAN on debian 12 with llvm-19?
 RUN cd bitcoin/ && cmake -B build_fuzz \
       --toolchain ./depends/$(./depends/config.guess)/toolchain.cmake \
       -DENABLE_HARDENING=OFF \

@@ -86,6 +86,7 @@ size_t nyx_init() {
   agent_config.trace_buffer_vaddr = (uintptr_t)trace_buffer;
   agent_config.agent_ijon_tracing = 0;
   agent_config.ijon_trace_buffer_vaddr = (uintptr_t)NULL;
+  // Does the below field agent_non_reload_mode=1 mean snapshot fuzzing is disabled?
   agent_config.agent_non_reload_mode = (uint8_t)1;
 
   kAFL_hypercall(HYPERCALL_KAFL_SET_AGENT_CONFIG, (uintptr_t)&agent_config);
@@ -113,6 +114,11 @@ size_t nyx_get_fuzz_input(const uint8_t *data, size_t max_size) {
   // Take snapshot
   hprintf("[init] taking snapshot\n");
   kAFL_hypercall(HYPERCALL_KAFL_USER_SUBMIT_MODE, KAFL_MODE_64);
+  
+  // This call must take the snapshot and provide the "reset" point...? But this doesn't make sense...
+  // agent_non_reload_mode=1 means that we need a while loop...? Also the print above is only called once
+  // which makes me think there is some snapshot restore mechanism? The definitive test would be to pollute
+  // some global state and trigger the panic hypercall if we detect global state pollution.
   kAFL_hypercall(HYPERCALL_KAFL_USER_FAST_ACQUIRE, 0);
 
   trace_buffer[0] = 1;

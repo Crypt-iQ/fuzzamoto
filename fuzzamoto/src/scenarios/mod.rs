@@ -116,7 +116,12 @@ macro_rules! fuzzamoto_main {
             };
 
             match scenario.run(&mut target, testcase) {
-                ScenarioResult::Ok(_) => {}
+                ScenarioResult::Ok(_) => {
+                    // drop(target); // Check if there's a way to see whether the VM is restored in both cases.
+                    // We can call a method on the runner? Is there a way to intentionally pollute global bitcoind state
+                    // to test this?
+                    // First see if we can log every iteration?
+                }
                 ScenarioResult::Skip => {
                     drop(target);
                     runner.skip();
