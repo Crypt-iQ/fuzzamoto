@@ -64,6 +64,11 @@ size_t nyx_init() {
   char shmid_str[16];
   memset(shmid_str, 0, sizeof(shmid_str));
   snprintf(shmid_str, sizeof(shmid_str), "%d", shmid);
+  // https://github.com/mirrorer/afl/blob/2fb5a3482ec27b593c57258baae7089ebdc89043/config.h#L267
+  // "Environment variable used to pass SHM ID to the called program."
+  // See also: https://robertheaton.com/2019/07/08/how-to-write-an-afl-wrapper-for-any-language/
+  // If the pointer is -1, then this is negative coverage? This is similar to the trace_buffer?
+  // See also: https://github.com/mirrorer/afl/blob/2fb5a3482ec27b593c57258baae7089ebdc89043/llvm_mode/afl-llvm-rt.o.c#L65-L90
   setenv("__AFL_SHM_ID", shmid_str, 1);
   char map_size_str[16];
   memset(map_size_str, 0, sizeof(map_size_str));
@@ -79,11 +84,19 @@ size_t nyx_init() {
   trace_buffer_size = agent_config.coverage_bitmap_size;
   memset(trace_buffer, 0, trace_buffer_size);
 
+  // https://intellabs.github.io/kAFL/reference/hypercall_api.html
   agent_config.agent_magic = NYX_AGENT_MAGIC;
   agent_config.agent_version = NYX_AGENT_VERSION;
   agent_config.agent_timeout_detection = (uint8_t)0;
-  agent_config.agent_tracing = (uint8_t)1;
+
+  // "The agent will perform the tracing. Disable host Intel-PT tracing."
+  agent_config.agent_tracing = (uint8_t)1; // What does agent_tracing mean here?
+  // This seems related to the above agent_tracing field? I think this means that we are providing coverage feedback
+  // by modifying the trace_buffer?
+  // "When using software instrumentation, define our own bitmap"
   agent_config.trace_buffer_vaddr = (uintptr_t)trace_buffer;
+
+
   agent_config.agent_ijon_tracing = 0;
   agent_config.ijon_trace_buffer_vaddr = (uintptr_t)NULL;
   // Does the below field agent_non_reload_mode=1 mean snapshot fuzzing is disabled?
@@ -121,7 +134,11 @@ size_t nyx_get_fuzz_input(const uint8_t *data, size_t max_size) {
   // some global state and trigger the panic hypercall if we detect global state pollution.
   kAFL_hypercall(HYPERCALL_KAFL_USER_FAST_ACQUIRE, 0);
 
+  // Is trace_buffer related to agent tracing?
   trace_buffer[0] = 1;
+
+  // Test log
+  hprintf("[post-fast-acquire] modified trace_buffer\n");
 
   // Copy payload buffer into data
   memcpy((void *)data, payload_buffer->data, payload_buffer->size);

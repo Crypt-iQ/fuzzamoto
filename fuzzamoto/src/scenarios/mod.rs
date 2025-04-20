@@ -121,6 +121,9 @@ macro_rules! fuzzamoto_main {
                     // We can call a method on the runner? Is there a way to intentionally pollute global bitcoind state
                     // to test this?
                     // First see if we can log every iteration?
+                    //
+                    drop(target);
+                    runner.skip();
                 }
                 ScenarioResult::Skip => {
                     drop(target);
