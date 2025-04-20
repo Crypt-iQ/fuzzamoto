@@ -2,6 +2,9 @@ pub mod generic;
 
 use crate::{connections::Transport, targets::Target};
 
+use std::fs::File;
+use std::io::prelude::*;
+
 #[cfg(not(feature = "record"))]
 use crate::connections::V1Transport;
 #[cfg(feature = "record")]
@@ -107,6 +110,20 @@ macro_rules! fuzzamoto_main {
 
             // In nyx mode the snapshot is taken here and a new fuzz input is provided each reset.
             let input = runner.get_fuzz_input();
+
+            // TODO: Can we modify global state here?
+            // 1. Create a file and see if it exists on reset.
+            // 2. Pollute global bitcoind state and see if it's reset on the next execution.
+ 
+            // Check to see if the file exists. If it does, then the vm state hasn't been restored.     
+            let mut existsfile = File::open("foo.txt")?;
+            let mut contents = String::new();
+            existsfile.read_to_string(&mut contents)?;
+            assert_eq!(contents, "");
+            assert_ne!(contents, "Hello, world");
+
+            let mut file = File::create("foo.txt");
+            file.write_all(b"Hello, world");
 
             let Ok(testcase) = <$testcase_type>::decode(&input) else {
                 log::warn!("Failed to decode test case!");

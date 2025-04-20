@@ -142,6 +142,8 @@ size_t nyx_get_fuzz_input(const uint8_t *data, size_t max_size) {
   // the [init] log above isn't called...
   hprintf("[post-fast-acquire] modified trace_buffer\n");
 
+  // Test to see if this is actually re-starting with global state...?
+
   // Copy payload buffer into data
   memcpy((void *)data, payload_buffer->data, payload_buffer->size);
 
