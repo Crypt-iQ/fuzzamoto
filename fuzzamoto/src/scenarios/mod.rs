@@ -121,13 +121,21 @@ macro_rules! fuzzamoto_main {
                     // We can call a method on the runner? Is there a way to intentionally pollute global bitcoind state
                     // to test this?
                     // First see if we can log every iteration?
-                    //
-                    drop(target);
-                    runner.skip();
+                    // - Uncommenting the below _with_ the [post-fast-acquire] log leads to a logging loop that doesn't call the
+                    //   the [init] log.
+                    // - The below seems to do nothing...? But then the question is if vm state is actually getting restored...
+                    //drop(target);
+                    //runner.skip();
                 }
                 ScenarioResult::Skip => {
-                    drop(target);
-                    runner.skip();
+                    // calls kAFL_RELEASE which "In the newer Nyx backend, reaching the RELEASE hypercall will automatically restore a guest snapshot."
+                    // unless agent_non_reload_mode=1?
+                    //drop(target);
+                    // 
+                    // memset(trace_buffer, 0, trace_buffer_size);
+                    // trace_buffer[0] = 1;
+                    // kAFL_hypercall(HYPERCALL_KAFL_RELEASE, 0);
+                    //runner.skip();
                     return std::process::ExitCode::SUCCESS;
                 }
                 ScenarioResult::Fail(err) => {

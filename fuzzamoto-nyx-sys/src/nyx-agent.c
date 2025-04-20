@@ -100,6 +100,7 @@ size_t nyx_init() {
   agent_config.agent_ijon_tracing = 0;
   agent_config.ijon_trace_buffer_vaddr = (uintptr_t)NULL;
   // Does the below field agent_non_reload_mode=1 mean snapshot fuzzing is disabled?
+  // - This was on with the logging loop...
   agent_config.agent_non_reload_mode = (uint8_t)1;
 
   kAFL_hypercall(HYPERCALL_KAFL_SET_AGENT_CONFIG, (uintptr_t)&agent_config);
@@ -137,7 +138,8 @@ size_t nyx_get_fuzz_input(const uint8_t *data, size_t max_size) {
   // Is trace_buffer related to agent tracing?
   trace_buffer[0] = 1;
 
-  // Test log
+  // Test log... but this is WITH the drop(target) and runner.skip() calls... Let's remove those next. Note that
+  // the [init] log above isn't called...
   hprintf("[post-fast-acquire] modified trace_buffer\n");
 
   // Copy payload buffer into data
