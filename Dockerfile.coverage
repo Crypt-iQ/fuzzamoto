@@ -1,6 +1,6 @@
 FROM debian:bookworm
 
-# ------ Build and install dependencies ------
+# ------ Coverage for fuzzamoto ------
 
 RUN apt-get update
 
@@ -72,35 +72,25 @@ ARG REPO=bitcoin
 ARG BRANCH=master
 RUN git clone --depth 1 --branch $BRANCH https://github.com/$OWNER/$REPO.git
 
-ENV CC=$PWD/AFLplusplus/afl-clang-fast
-ENV CXX=$PWD/AFLplusplus/afl-clang-fast++
-ENV LD=$PWD/AFLplusplus/afl-clang-fast
+ENV CC=clang-${LLVM_V}
+ENV CXX=clang++-${LLVM_V}
+# TODO: No ENV LD=?
 
-ENV SOURCES_PATH=/tmp/bitcoin-depends
-RUN make -C bitcoin/depends NO_QT=1 NO_ZMQ=1 NO_USDT=1 download-linux SOURCES_PATH=$SOURCES_PATH
-# Keep extracted source 
-RUN sed -i --regexp-extended '/.*rm -rf .*extract_dir.*/d' ./bitcoin/depends/funcs.mk && \
-    make -C ./bitcoin/depends DEBUG=1 NO_QT=1 NO_BDB=1 NO_ZMQ=1 NO_USDT=1 \
-      SOURCES_PATH=$SOURCES_PATH \
-      AR=llvm-ar-${LLVM_V} NM=llvm-nm-${LLVM_V} RANLIB=llvm-ranlib-${LLVM_V} STRIP=llvm-strip-${LLVM_V} \
-      -j$(nproc)
+# TODO: No depends?
 
 COPY ./target-patches/bitcoin-core-rng.patch bitcoin/
 
 RUN cd bitcoin/ && \
       git apply bitcoin-core-rng.patch
 
-RUN cd bitcoin/ && cmake -B build_fuzz \
-      --toolchain ./depends/$(./depends/config.guess)/toolchain.cmake \
-      -DSANITIZERS="address" \
-      -DAPPEND_CPPFLAGS="-DFUZZING_BUILD_MODE_UNSAFE_FOR_PRODUCTION" \
-      -DAPPEND_LDFLAGS="-fuse-ld=lld-${LLVM_V}"
+RUN cd bitcoin/ && cmake -B build_fuzz_cov \
+      -DCMAKE_C_COMPILER="clang" -DCMAKE_CXX_COMPILER="clang++" -DAPPEND_CFLAGS="-fprofile-instr-generate -fcoverage-mapping" \
+      -DAPPEND_CXXFLAGS="-fprofile-instr-generate -fcoverage-mapping" -DAPPEND_LDFLAGS="-fprofile-instr-generate -fcoverage-mapping" -DBUILD_FOR_FUZZING=ON
 
-RUN cmake --build bitcoin/build_fuzz -j$(nproc) --target bitcoind
+RUN cmake --build build_fuzz_cov -j$(nproc) --target bitcoind
 
 ENV CC=
 ENV CXX=
-ENV LD=
 
 WORKDIR /fuzzamoto/fuzzamoto-nyx-sys
 COPY ./fuzzamoto-nyx-sys/Cargo.toml .
@@ -124,7 +114,7 @@ WORKDIR /fuzzamoto
 COPY ./Cargo.toml .
 RUN mkdir .cargo && cargo vendor > .cargo/config
 
-ENV BITCOIND_PATH=/bitcoin/build_fuzz/bin/bitcoind
+ENV BITCOIND_PATH=/bitcoin/build_fuzz_cov/bin/bitcoind
 RUN cargo build --workspace --verbose --features nyx,reduced_pow --release
 
 # Build the crash handler
@@ -133,27 +123,18 @@ RUN cargo build --workspace --verbose --features nyx,reduced_pow --release
 RUN clang-${LLVM_V} -fPIC -DENABLE_NYX -D_GNU_SOURCE -DNO_PT_NYX \
     ./fuzzamoto-nyx-sys/src/nyx-crash-handler.c -ldl -I. -shared -o libnyx_crash_handler.so
 
-# ------ Create the nyx share dir ------
+# fuzzamoto-cli coverage
+WORKDIR /fuzzamoto/corpus
+COPY ./fuzzamoto-corpus/corpus/ .
 
-WORKDIR /
-
-# Create share dir and copy runtime deps into it for each scenario
+# TODO: Fix the below to target a specific one
 RUN for scenario in /fuzzamoto/target/release/scenario-*; do \
       if [ -f "$scenario" ] && [ -x "$scenario" ]; then \
-      scenario_name=$(basename $scenario); \
-      export SCENARIO_NYX_DIR="/tmp/fuzzamoto_${scenario_name}"; \
-      /fuzzamoto/target/release/fuzzamoto-cli init \
-        --sharedir $SCENARIO_NYX_DIR \
-        --crash-handler ./fuzzamoto/libnyx_crash_handler.so \
-        --bitcoind bitcoin/build_fuzz/bin/bitcoind \
-        --scenario $scenario; \
-      cp /AFLplusplus/nyx_mode/packer/packer/linux_x86_64-userspace/bin64/* $SCENARIO_NYX_DIR; \
-      python3 ./AFLplusplus/nyx_mode/packer/packer/nyx_config_gen.py $SCENARIO_NYX_DIR Kernel -m 4096; \
+      /fuzzamoto/target/release/fuzzamoto-cli coverage \
+        --output fuzzamoto \
+        --corpus fuzzamoto/corpus \
+        --bitcoind bitcoin/build_fuzz_cov/bin/bitcoind \
+        --scenario $scenario; \ 
       fi \
     done
 
-# fuzzamoto-cli init runs the scenario, creates fuzz_no_pt.sh
-
-# Run fuzzamoto-cli coverage -- this does <scenario> <bitcoind> ... i.e. runs the scenario
-# Does not seem like we need to make the share directory and can just use the cargo run command
-# <output> <corpus> <bitcoind> <scenario>
