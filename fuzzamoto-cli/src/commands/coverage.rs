@@ -68,15 +68,33 @@ impl CoverageCommand {
             return Err(CliError::ProcessError("No profraw files found".to_string()));
         }
 
-        // Merge profraw files
+        const chunk_size: usize = 1000;
+
+        let mut coverage_profdata_files = Vec::new();
+        for (chunk_index, chunk) in profraw_files.chunks(chunk_size).enumerate() {
+            // Merge profraw files
+            let coverage_profdata = output.join(format!(
+                "coverage{}.profdata",
+                chunk_index
+            ));
+            let coverage_profdata_str = coverage_profdata.to_str().unwrap();
+            coverage_profdata_files.push(coverage_profdata_str.to_string());
+
+            let mut merge_args = vec!["merge", "-sparse"];
+            let profraw_refs: Vec<&str> = chunk.iter().map(|s| s.as_str()).collect();
+            merge_args.extend(profraw_refs);
+            merge_args.extend(["-o", coverage_profdata_str]);
+            let merge_cmd = process::get_llvm_command("llvm-profdata");
+            process::run_command_with_status(&merge_cmd, &merge_args, None)?;
+        }
+
+        // Merge coverage*.profdata into coverage.profdata
         let coverage_profdata = output.join("coverage.profdata");
         let coverage_profdata_str = coverage_profdata.to_str().unwrap();
-
         let mut merge_args = vec!["merge", "-sparse"];
-        let profraw_refs: Vec<&str> = profraw_files.iter().map(|s| s.as_str()).collect();
-        merge_args.extend(profraw_refs);
+        let profdata_refs: Vec<&str> = coverage_profdata_files.iter().map(|s| s.as_str()).collect();
+        merge_args.extend(profdata_refs);
         merge_args.extend(["-o", coverage_profdata_str]);
-
         let merge_cmd = process::get_llvm_command("llvm-profdata");
         process::run_command_with_status(&merge_cmd, &merge_args, None)?;
 
