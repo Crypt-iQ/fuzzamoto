@@ -302,7 +302,10 @@ where
             (20.0, IrGenerator::new(WitnessGenerator::new(), rng.clone())),
             (20.0, IrGenerator::new(InventoryGenerator, rng.clone())),
             (20.0, IrGenerator::new(GetDataGenerator, rng.clone())),
-            (50.0, IrGenerator::new(BlockGenerator, rng.clone())),
+            (
+                50.0,
+                IrGenerator::new(BlockGenerator::default(), rng.clone())
+            ),
             (
                 50.0,
                 IrGenerator::new(
