@@ -157,6 +157,8 @@ where
                 current_ir.ir().instructions.len()
             );
 
+            log::info!("IR: {}", current_ir.ir());
+
             let mut testcase = state.current_testcase_mut()?;
             testcase.set_input(current_ir);
             let filepath = testcase.file_path().as_ref().unwrap().clone();
