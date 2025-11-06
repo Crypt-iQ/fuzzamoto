@@ -65,7 +65,13 @@ RUN cd AFLplusplus/nyx_mode/ && ./build_nyx_support.sh
 ARG OWNER=bitcoin
 ARG REPO=bitcoin
 ARG BRANCH=master
-RUN git clone --depth 1 --branch $BRANCH https://github.com/$OWNER/$REPO.git
+ARG PR_NUMBER=33191
+RUN git clone --depth 1 --branch "$BRANCH" "https://github.com/$OWNER/$REPO.git" && \
+    if [ -n "$PR_NUMBER" ]; then \
+        cd "$REPO" && \
+        git fetch --depth=1 origin "pull/$PR_NUMBER/head:pr-$PR_NUMBER" && \
+        git checkout "pr-$PR_NUMBER"; \
+    fi
 
 ENV CC=$PWD/AFLplusplus/afl-clang-fast
 ENV CXX=$PWD/AFLplusplus/afl-clang-fast++
@@ -78,6 +84,11 @@ RUN sed -i --regexp-extended '/.*rm -rf .*extract_dir.*/d' ./bitcoin/depends/fun
       SOURCES_PATH=$SOURCES_PATH \
       AR=llvm-ar-${LLVM_V} NM=llvm-nm-${LLVM_V} RANLIB=llvm-ranlib-${LLVM_V} STRIP=llvm-strip-${LLVM_V} \
       -j$(nproc)
+
+COPY ./target-patches/template.patch bitcoin/
+
+RUN cd bitcoin/ && \
+      git apply template.patch
 
 COPY ./target-patches/bitcoin-core-aggressive-rng.patch bitcoin/
 

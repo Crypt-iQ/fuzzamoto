@@ -36,7 +36,18 @@ RUN rustup install nightly && rustup default nightly
 ARG OWNER=bitcoin
 ARG REPO=bitcoin
 ARG BRANCH=master
-RUN git clone --depth 1 --branch $BRANCH https://github.com/$OWNER/$REPO.git
+ARG PR_NUMBER=33191
+RUN git clone --depth 1 --branch "$BRANCH" https://github.com/$OWNER/$REPO.git && \
+    if [ -n "$PR_NUMBER" ]; then \
+        cd "$REPO" && \
+        git fetch --depth=1 origin "pull/$PR_NUMBER/head:pr-$PR_NUMBER" && \
+        git checkout "pr-$PR_NUMBER"; \
+    fi
+
+COPY ./target-patches/template.patch bitcoin/
+
+RUN cd bitcoin/ && \
+      git apply template.patch
 
 ENV CC=clang-${LLVM_V}
 ENV CXX=clang++-${LLVM_V}
