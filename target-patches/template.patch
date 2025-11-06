@@ -1,0 +1,23 @@
+diff --git a/src/net_processing.cpp b/src/net_processing.cpp
+index ac015c5705..8f9e0cb632 100644
+--- a/src/net_processing.cpp
++++ b/src/net_processing.cpp
+@@ -4208,15 +4208,15 @@ void PeerManagerImpl::ProcessMessage(CNode& pfrom, const std::string& msg_type,
+                 recent_block = m_most_recent_block;
+             // Unlock m_most_recent_block_mutex to avoid cs_main lock inversion
+         }
+-        if (recent_block) {
++/*        if (recent_block) {
+             SendBlockTransactions(pfrom, *peer, *recent_block, req);
+             return;
+         }
+-
++*/
+         if (auto* tx_relay = peer->GetTxRelay(); tx_relay) {
+             LOCK(tx_relay->m_tx_inventory_mutex);
+             for (const auto& mytmp : m_templateman.my_templates) {
+-                if (mytmp.hash == req.blockhash && tx_relay->m_last_inv_sequence >= mytmp.inv_sequence) {
++                if (tx_relay->m_last_inv_sequence >= mytmp.inv_sequence) {
+                     LogDebug(BCLog::SHARETMPL, "Sending requested txns for template %s peer=%d\n", mytmp.hash.ToString(), peer->m_id);
+                     SendTemplateTransactions(pfrom, *peer, mytmp, req);
+                     return;
