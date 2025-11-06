@@ -66,6 +66,9 @@ impl Default for SendMessageGenerator {
             "wtxidrelay".to_string(),
             "addrv2".to_string(),
             "sendaddrv2".to_string(),
+            "sendtemplate".to_string(),
+            "gettemplate".to_string(),
+            "template".to_string(),
         ])
     }
 }

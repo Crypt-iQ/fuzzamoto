@@ -6,6 +6,7 @@ use fuzzamoto_ir::{
     InventoryGenerator, LargeTxGenerator, LongChainGenerator, OneParentOneChildGenerator,
     OperationMutator, Program, SendBlockGenerator, SendMessageGenerator, SingleTxGenerator,
     TxoGenerator, WitnessGenerator, cutting::CuttingMinimizer, instr_block::InstrBlockMinimizer,
+    GetTemplateGenerator, GetBlockTxnGenerator,
     nopping::NoppingMinimizer,
 };
 
@@ -275,12 +276,14 @@ where
                 IrGenerator::new(SendBlockGenerator::default(), rng.clone()),
                 IrGenerator::new(AddTxToBlockGenerator::default(), rng.clone()),
                 IrGenerator::new(CompactFilterQueryGenerator::default(), rng.clone()),
+                IrGenerator::new(GetTemplateGenerator::default(), rng.clone()),
+                IrGenerator::new(GetBlockTxnGenerator::default(), rng.clone()),
             ),
         );
 
         let weights = &[
-            2000f32, 1000.0, 100.0, 10.0, 40.0, 50.0, 50.0, 50.0, 50.0, 20.0, 20.0, 20.0, 20.0,
-            50.0, 50.0, 50.0, 50.0, 10.0,
+            200f32, 100.0, 100.0, 10.0, 100.0, 4000.0, 4000.0, 4000.0, 4000.0, 3000.0, 20.0, 20.0, 20.0,
+            20.0, 20.0, 10.0, 10.0, 10.0, 2000.0, 2000.0
         ];
         let sum = weights.iter().sum::<f32>();
         assert_eq!(mutator.mutations().len(), weights.len());

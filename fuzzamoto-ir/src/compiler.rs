@@ -4,6 +4,7 @@ use bitcoin::{
     Amount, CompactTarget, EcdsaSighashType, NetworkKind, OutPoint, PrivateKey, Script, ScriptBuf,
     Sequence, Transaction, TxIn, TxMerkleNode, TxOut, Txid, WitnessMerkleNode, Wtxid,
     absolute::LockTime,
+    bip152::{BlockTransactionsRequest},
     consensus::Encodable,
     ecdsa,
     hashes::{Hash, serde_macros::serde_details::SerdeHash, sha256},
@@ -11,6 +12,7 @@ use bitcoin::{
     opcodes::{OP_0, OP_TRUE, all::OP_RETURN},
     p2p::{
         message_blockdata::Inventory,
+        message_compact_blocks::{GetBlockTxn},
         message_filter::{GetCFCheckpt, GetCFHeaders, GetCFilters},
     },
     script::PushBytesBuf,
@@ -149,6 +151,7 @@ impl Compiler {
                 | Operation::LoadCompactFilterType(..)
                 | Operation::LoadMsgType(..)
                 | Operation::LoadBytes(..)
+                | Operation::LoadIndices(..)
                 | Operation::LoadSize(..)
                 | Operation::LoadPrivateKey(..)
                 | Operation::LoadSigHashFlags(..)
@@ -219,7 +222,9 @@ impl Compiler {
                 | Operation::SendBlockNoWit
                 | Operation::SendGetCFilters
                 | Operation::SendGetCFHeaders
-                | Operation::SendGetCFCheckpt => {
+                | Operation::SendGetCFCheckpt
+                | Operation::SendGetBlockTxn
+                | Operation::SendGetTemplate => {
                     self.handle_message_sending_operations(&instruction)?;
                 }
             }
@@ -653,6 +658,35 @@ impl Compiler {
                     },
                 );
             }
+            Operation::SendGetBlockTxn => {
+                let connection_var = self.get_input::<usize>(&instruction.inputs, 0)?;
+                let header_var = self.get_input::<Header>(&instruction.inputs, 1)?;
+                let indices = self.get_input::<Vec<u16>>(&instruction.inputs, 2)?;
+
+                let indices_u64: Vec<u64> = indices.iter().map(|&x| x as u64).collect();
+
+                self.emit_send_message(
+                    *connection_var,
+                    "getblocktxn",
+                    &GetBlockTxn {
+                        txs_request: BlockTransactionsRequest {
+                            block_hash: header_var.to_bitcoin_header().block_hash(),
+                            indexes: indices_u64,
+                        },
+                    },
+                );
+            }
+            Operation::SendGetTemplate => {
+                let connection_var = self.get_input::<usize>(&instruction.inputs, 0)?;
+
+                let empty_payload : Vec<u8> = Vec::new();
+
+                self.emit_send_raw_message(
+                    *connection_var,
+                    "gettemplate",
+                    empty_payload,
+                );
+            }
             _ => unreachable!(
                 "Non-message-sending operation passed to handle_message_sending_operations"
             ),
@@ -691,6 +725,7 @@ impl Compiler {
             }
             Operation::LoadMsgType(message_type) => self.handle_load_operation(*message_type),
             Operation::LoadBytes(bytes) => self.handle_load_operation(bytes.clone()),
+            Operation::LoadIndices(indices) => self.handle_load_operation(indices.clone()),
             Operation::LoadSize(size) => self.handle_load_operation(*size),
             Operation::LoadPrivateKey(private_key) => self.handle_load_operation(*private_key),
             Operation::LoadSigHashFlags(sig_hash_flags) => {

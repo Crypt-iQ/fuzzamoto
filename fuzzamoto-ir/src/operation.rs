@@ -12,6 +12,7 @@ pub enum Operation {
 
     /// `Load*` operations load data from the program's context
     LoadBytes(Vec<u8>),
+    LoadIndices(Vec<u16>),
     LoadMsgType([char; 12]),
     LoadNode(usize),
     LoadConnection(usize),
@@ -107,6 +108,10 @@ pub enum Operation {
     SendGetCFilters,
     SendGetCFHeaders,
     SendGetCFCheckpt,
+
+    SendGetBlockTxn,
+    SendGetTemplate,
+
     // TODO: SendCompactBlock
     // TODO: SendGetBlockTxn
     // TODO: SendBlockTxn
@@ -126,6 +131,9 @@ impl fmt::Display for Operation {
                     .map(|b| format!("{:02x}", b))
                     .collect::<String>()
             ), // as hex
+            Operation::LoadIndices(_indices) => write!(
+               f, "LoadIndices()",
+            ),
             Operation::LoadMsgType(msg_type) => write!(
                 f,
                 "LoadMsgType(\"{}\")",
@@ -239,6 +247,8 @@ impl fmt::Display for Operation {
             Operation::SendGetCFilters => write!(f, "SendGetCFilters"),
             Operation::SendGetCFHeaders => write!(f, "SendGetCFHeaders"),
             Operation::SendGetCFCheckpt => write!(f, "SendGetCFCheckpt"),
+            Operation::SendGetBlockTxn => write!(f, "SendGetBlockTxn"),
+            Operation::SendGetTemplate => write!(f, "SendGetTemplate"),
         }
     }
 }
@@ -280,6 +290,7 @@ impl Operation {
             // Exhaustive match to fail when new ops are added
             Operation::Nop { .. }
             | Operation::LoadBytes(_)
+            | Operation::LoadIndices(_)
             | Operation::LoadMsgType(_)
             | Operation::LoadNode(_)
             | Operation::LoadConnection(_)
@@ -337,7 +348,9 @@ impl Operation {
             | Operation::SendGetCFilters
             | Operation::SendGetCFHeaders
             | Operation::SendGetCFCheckpt
-            | Operation::SendBlockNoWit => false,
+            | Operation::SendBlockNoWit
+            | Operation::SendGetBlockTxn
+            | Operation::SendGetTemplate => false,
         }
     }
 
@@ -371,6 +384,7 @@ impl Operation {
             // Exhaustive match to fail when new ops are added
             Operation::Nop { .. }
             | Operation::LoadBytes(_)
+            | Operation::LoadIndices(_)
             | Operation::LoadMsgType(_)
             | Operation::LoadNode(_)
             | Operation::LoadConnection(_)
@@ -428,7 +442,9 @@ impl Operation {
             | Operation::SendGetCFilters
             | Operation::SendGetCFHeaders
             | Operation::SendGetCFCheckpt
-            | Operation::SendBlockNoWit => false,
+            | Operation::SendBlockNoWit
+            | Operation::SendGetBlockTxn
+            | Operation::SendGetTemplate => false,
         }
     }
 
@@ -473,6 +489,7 @@ impl Operation {
     pub fn get_output_variables(&self) -> Vec<Variable> {
         match self {
             Operation::LoadBytes(_) => vec![Variable::Bytes],
+            Operation::LoadIndices(_) => vec![Variable::Indices],
             Operation::LoadMsgType(_) => vec![Variable::MsgType],
             Operation::LoadNode(_) => vec![Variable::Node],
             Operation::LoadConnection(_) => vec![Variable::Connection],
@@ -542,6 +559,8 @@ impl Operation {
             Operation::SendGetCFilters => vec![],
             Operation::SendGetCFHeaders => vec![],
             Operation::SendGetCFCheckpt => vec![],
+            Operation::SendGetBlockTxn => vec![],
+            Operation::SendGetTemplate => vec![],
         }
     }
 
@@ -630,9 +649,18 @@ impl Operation {
                 Variable::CompactFilterType,
                 Variable::Header,
             ],
+            Operation::SendGetBlockTxn => vec![
+                Variable::Connection,
+                Variable::Header,
+                Variable::Indices,
+            ],
+            Operation::SendGetTemplate => vec![
+                Variable::Connection,
+            ],
             // Operations with no inputs
             Operation::Nop { .. }
             | Operation::LoadBytes(_)
+            | Operation::LoadIndices(_)
             | Operation::LoadMsgType(_)
             | Operation::LoadNode(_)
             | Operation::LoadConnection(_)
@@ -673,6 +701,7 @@ impl Operation {
             } => vec![Variable::Nop; *inner_outputs],
             // Exhaustive match to fail when new ops are added
             Operation::LoadBytes(_)
+            | Operation::LoadIndices(_)
             | Operation::LoadMsgType(_)
             | Operation::LoadNode(_)
             | Operation::LoadConnection(_)
@@ -730,7 +759,9 @@ impl Operation {
             | Operation::SendBlockNoWit
             | Operation::SendGetCFilters
             | Operation::SendGetCFHeaders
-            | Operation::SendGetCFCheckpt => vec![],
+            | Operation::SendGetCFCheckpt
+            | Operation::SendGetBlockTxn
+            | Operation::SendGetTemplate => vec![],
         }
     }
 }

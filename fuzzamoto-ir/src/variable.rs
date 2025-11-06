@@ -4,6 +4,7 @@ pub enum Variable {
     Nop, // Output type for no-op instructions
 
     Bytes,             // Raw bytes
+    Indices,           // Diff-encoded indices into a block (template)
     MsgType,           // p2p message type
     Node,              // Index of a node that exists in the context
     Connection,        // Index of a connection that exists in the context

@@ -179,3 +179,68 @@ impl<R: RngCore> Generator<R> for AddTxToBlockGenerator {
         InstructionContext::BlockTransactions
     }
 }
+
+/// `GetTemplateGenerator` generates a single `SendGetTemplate` instruction
+#[derive(Default)]
+pub struct GetTemplateGenerator;
+
+impl<R: RngCore> Generator<R> for GetTemplateGenerator {
+    fn generate(&self, builder: &mut ProgramBuilder, rng: &mut R) -> GeneratorResult {
+        let conn_var = builder.get_or_create_random_connection(rng);
+        builder.force_append(vec![conn_var.index], Operation::SendGetTemplate);
+        Ok(())
+    }
+
+    fn name(&self) -> &'static str {
+        "GetTemplateGenerator"
+    }
+}
+
+/// `GetBlockTxnGenerator` generates `SendGetBlockTxn` instructions to request templates
+#[derive(Default)]
+pub struct GetBlockTxnGenerator;
+
+impl<R: RngCore> Generator<R> for GetBlockTxnGenerator {
+    fn generate(&self, builder: &mut ProgramBuilder, rng: &mut R) -> GeneratorResult {
+       let conn_var = builder.get_or_create_random_connection(rng);
+       let header_var = builder.get_random_variable(rng, Variable::Header).ok_or(GeneratorError::MissingVariables)?;
+
+       // Use LoadIndices to fetch a Variable::Indices
+       let mut indices : Vec<u16> = Vec::new();
+       if rng.gen_bool(0.80) {
+           indices.resize(rng.gen_range(0..10), 0);
+       } else {
+           indices.resize(rng.gen_range(0..100), 0);
+       }
+
+       for i in 0..indices.len() {
+           indices[i] = rng.next_u32() as u16;
+       }
+
+       indices.sort();
+       indices.dedup();
+
+/*
+       let mut prev_idx = 0;
+       let diff_indices : Vec<u16> = indices.clone().into_iter().map(|tx_idx| {
+           let diff_idx = if tx_idx == 0 {
+               0 // First index is not differential
+           } else {
+               tx_idx - prev_idx - 1
+           };
+           prev_idx = tx_idx;
+
+           diff_idx
+       }).collect();
+*/
+
+       let load_indices_var = builder.force_append_expect_output(vec![], Operation::LoadIndices(indices));
+
+       builder.force_append(vec![conn_var.index, header_var.index, load_indices_var.index], Operation::SendGetBlockTxn);
+       Ok(())
+    }
+
+    fn name(&self) -> &'static str {
+        "GetBlockTxnGenerator"
+    }
+}

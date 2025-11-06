@@ -62,6 +62,7 @@ impl Instruction {
     pub fn is_noppable(&self) -> bool {
         match self.operation {
             Operation::LoadBytes(_)
+            | Operation::LoadIndices(_)
             | Operation::LoadMsgType(_)
             | Operation::LoadNode(_)
             | Operation::LoadConnection(_)
@@ -113,6 +114,8 @@ impl Instruction {
             | Operation::SendGetCFilters
             | Operation::SendGetCFHeaders
             | Operation::SendGetCFCheckpt
+            | Operation::SendGetBlockTxn
+            | Operation::SendGetTemplate
             | Operation::TakeTxo => true,
 
             Operation::Nop { .. }
