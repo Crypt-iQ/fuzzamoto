@@ -72,6 +72,7 @@ impl Target<V1Transport> for BitcoinCoreTarget {
             "-dbcache=4",    // 4MiB
             "-datacarriersize=1000000",
             "-peertimeout=8223372036854775807",
+            "-sharetemplatecount=10",
         ]);
 
         let node = Node::with_conf(exe_path, &config)
