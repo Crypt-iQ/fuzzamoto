@@ -9,12 +9,15 @@ use fuzzamoto::{
 use arbitrary::{Arbitrary, Unstructured};
 use bitcoin::{
     Amount, BlockHash,
-    bip152::{BlockTransactions, HeaderAndShortIds, PrefilledTransaction, ShortId},
+    bip152::{
+        BlockTransactions, BlockTransactionsRequest, HeaderAndShortIds, PrefilledTransaction,
+        ShortId,
+    },
     consensus::encode,
     p2p::message::NetworkMessage,
     p2p::{
         message_blockdata::Inventory,
-        message_compact_blocks::{BlockTxn, CmpctBlock},
+        message_compact_blocks::{BlockTxn, CmpctBlock, GetBlockTxn},
     },
 };
 
@@ -52,6 +55,14 @@ enum Action {
     SendBlockTxn { block: u16, txs: TxIndices },
     /// Advance the mocktime of the target node
     AdvanceTime { seconds: u16 },
+    /// Send a `gettemplate` message to the target node
+    SendGetTemplate { from: u16 },
+    /// Send a `getblocktxn` message to the target node with a previously constructed block (even though this is for template...) (BlockTransactionsReq)
+    SendGetBlockTxn {
+        from: u16,
+        block: u16,
+        indexes: TxIndices,
+    },
 }
 
 #[derive(Arbitrary)]
@@ -81,6 +92,8 @@ impl ScenarioInput<'_> for TestCase {
 /// 6. Send a `tx` message to the target node for a previously constructed block
 /// 7. Send a `blocktxn` message to the target node for a previously constructed block
 /// 8. Advance the mocktime of the target node
+/// 9. Send a `gettemplate` message to the target node
+/// 10. Send a `getblocktxn` message to the target node for a previously constructed block
 struct CompactBlocksScenario<TX: Transport, T: Target<TX>> {
     inner: GenericScenario<TX, T>,
 
@@ -307,6 +320,31 @@ impl<TX: Transport, T: Target<TX>> Scenario<'_, TestCase> for CompactBlocksScena
                 Action::AdvanceTime { seconds } => {
                     self.inner.time += seconds as u64;
                     let _ = self.inner.target.set_mocktime(self.inner.time);
+                }
+                Action::SendGetTemplate { from } => {
+                    let payload: Vec<u8> = Vec::new();
+                    let num_conns = self.inner.connections.len();
+                    let _ =
+                        self.inner.connections[from as usize % num_conns].send(&("gettemplate".to_string(), payload));
+                }
+                Action::SendGetBlockTxn {
+                    from,
+                    block,
+                    indexes,
+                } => {
+                    if let Some((unused_from, block)) = self.get_block(block as usize) {
+                        let indexes_u64: Vec<u64> = indexes.0.iter().map(|&x| x as u64).collect();
+                        let getblocktxn = NetworkMessage::GetBlockTxn(GetBlockTxn {
+                            txs_request: BlockTransactionsRequest {
+                                block_hash: block.block_hash(),
+                                indexes: indexes_u64,
+                            },
+                        });
+
+                        let num_conns = self.inner.connections.len();
+                        let _ = self.inner.connections[from as usize % num_conns]
+                            .send(&("getblocktxn".to_string(), encode::serialize(&getblocktxn)));
+                    }
                 }
             }
         }
