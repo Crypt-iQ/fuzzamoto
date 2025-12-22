@@ -1,6 +1,7 @@
 use fuzzamoto::{
     connections::{Transport, V1Transport},
     fuzzamoto_main,
+    runners::Runner,
     scenarios::{Scenario, ScenarioInput, ScenarioResult, generic::GenericScenario},
     targets::{BitcoinCoreTarget, Target},
 };
@@ -51,7 +52,7 @@ impl<'a> Scenario<'a, WalletDotDatBytes<'a>>
         })
     }
 
-    fn run(&mut self, input: WalletDotDatBytes) -> ScenarioResult {
+    fn run(&mut self, input: WalletDotDatBytes, _runner: &dyn Runner) -> ScenarioResult {
         let _ = std::fs::create_dir_all(self.wallet_path.parent().unwrap());
 
         if let Ok(mut wallet_file) = std::fs::File::create(&self.wallet_path) {

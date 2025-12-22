@@ -1,6 +1,7 @@
 use fuzzamoto::{
     connections::V1Transport,
     fuzzamoto_main,
+    runners::Runner,
     scenarios::{Scenario, ScenarioInput, ScenarioResult},
     targets::{BitcoinCoreTarget, Target},
 };
@@ -56,7 +57,7 @@ impl<'a> Scenario<'a, TestCase<'a>> for HttpServerScenario<V1Transport, BitcoinC
         })
     }
 
-    fn run(&mut self, input: TestCase) -> ScenarioResult {
+    fn run(&mut self, input: TestCase, _runner: &dyn Runner) -> ScenarioResult {
         // Network actions are slow; limit them
         const MAX_ACTIONS: usize = 128;
         if input.actions.len() > MAX_ACTIONS {

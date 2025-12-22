@@ -1,6 +1,8 @@
 #[cfg(any(feature = "oracle_netsplit", feature = "oracle_consensus"))]
 use std::time::{Duration, Instant};
 
+use fuzzamoto::runners::Runner;
+
 #[cfg(feature = "nyx")]
 use fuzzamoto_nyx_sys::*;
 
@@ -193,12 +195,17 @@ where
         Ok(())
     }
 
-    fn process_actions(&mut self, actions: Vec<CompiledAction>) {
-        for action in actions {
+    fn process_actions(
+        &mut self,
+        actions: Vec<CompiledAction>,
+        start_index: usize,
+        runner: &dyn Runner,
+    ) -> Option<(Vec<u8>, usize)> {
+        for (i, action) in actions.into_iter().enumerate().skip(start_index) {
             match action {
                 CompiledAction::SendRawMessage(from, command, message) => {
                     if self.inner.connections.is_empty() {
-                        return;
+                        return None;
                     }
 
                     let num_connections = self.inner.connections.len();
@@ -216,9 +223,19 @@ where
                     #[cfg(any(feature = "oracle_netsplit", feature = "oracle_consensus"))]
                     let _ = self.second.set_mocktime(time);
                 }
+                CompiledAction::IncrementalSnapshot => {
+                    // If we're creating a new temporary snapshot, we want to save the index to skip
+                    // ahead to.
+                    // TODO: Because we return if we're creating for the first time, this is slightly
+                    //       wrong.
+                    let prefix_index = i + 1;
+                    let (new_payload, action_pos) = runner.create_tmp_and_next(prefix_index);
+                    return Some((new_payload, action_pos));
+                }
                 _ => {}
             }
         }
+        None
     }
 
     fn ping_connections(&mut self) {
@@ -295,8 +312,40 @@ where
         })
     }
 
-    fn run(&mut self, testcase: TestCase) -> ScenarioResult {
-        self.process_actions(testcase.program.actions);
+    fn run(&mut self, testcase: TestCase, runner: &dyn Runner) -> ScenarioResult {
+        let mut actions = testcase.program.actions;
+        let mut start_index = 0;
+
+        loop {
+            match self.process_actions(actions, start_index, runner) {
+                Some((new_payload, action_pos)) => {
+                    let new_testcase = match TestCase::decode(&new_payload) {
+                        Ok(tc) => tc,
+                        Err(e) => {
+                            log::warn!("Failed to decode new payload after TMP: {}", e);
+                            runner.skip();
+                            return ScenarioResult::Skip;
+                        }
+                    };
+
+                    // Resume just after the snapshot prefix.
+                    actions = new_testcase.program.actions;
+                    start_index = action_pos;
+
+                    if start_index > actions.len() {
+                        log::warn!(
+                            "Action position {} exceeds action count {}, clamping",
+                            start_index,
+                            actions.len()
+                        );
+                        start_index = actions.len();
+                    }
+                }
+                None => {
+                    break;
+                }
+            }
+        }
         self.ping_connections();
         self.evaluate_oracles()
     }

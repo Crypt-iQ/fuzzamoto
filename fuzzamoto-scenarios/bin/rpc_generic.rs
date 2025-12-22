@@ -1,5 +1,6 @@
 use fuzzamoto::{
     fuzzamoto_main,
+    runners::Runner,
     scenarios::{Scenario, ScenarioInput, ScenarioResult},
     targets::{BitcoinCoreTarget, Target},
 };
@@ -393,7 +394,7 @@ impl<'a> Scenario<'a, TestCase> for RpcScenario {
         })
     }
 
-    fn run(&mut self, input: TestCase) -> ScenarioResult {
+    fn run(&mut self, input: TestCase, _runner: &dyn Runner) -> ScenarioResult {
         for rpc_call in input.rpc_calls {
             // Convert the rpc parameters given by the fuzzer into `serde_json::Value`s. This may
             // either result in params interpreted from the fuzz input or taken from the
