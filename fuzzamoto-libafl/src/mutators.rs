@@ -49,10 +49,17 @@ where
     M: fuzzamoto_ir::Mutator<R>,
 {
     fn mutate(&mut self, _state: &mut S, input: &mut IrInput) -> Result<MutationResult, Error> {
-        Ok(match self.mutator.mutate(input.ir_mut(), &mut self.rng) {
-            Ok(_) => MutationResult::Mutated,
-            _ => MutationResult::Skipped,
-        })
+        let min_index = input.frozen_prefix_len.unwrap_or(0);
+
+        Ok(
+            match self
+                .mutator
+                .mutate_from(input.ir_mut(), &mut self.rng, min_index)
+            {
+                Ok(_) => MutationResult::Mutated,
+                _ => MutationResult::Skipped,
+            },
+        )
     }
 
     #[inline]
@@ -112,10 +119,12 @@ where
 
         let other = other_testcase.load_input(state.corpus())?;
 
+        let min_index = input.frozen_prefix_len.unwrap_or(0);
+
         let mut input_clone = input.clone();
         if self
             .mutator
-            .splice(input_clone.ir_mut(), other.ir(), &mut self.rng)
+            .splice_from(input_clone.ir_mut(), other.ir(), &mut self.rng, min_index)
             .is_err()
         {
             return Ok(MutationResult::Skipped);
@@ -170,10 +179,13 @@ where
     G: fuzzamoto_ir::Generator<R>,
 {
     fn mutate(&mut self, _state: &mut S, input: &mut IrInput) -> Result<MutationResult, Error> {
-        let Some(index) = input
-            .ir()
-            .get_random_instruction_index(&mut self.rng, self.generator.requested_context())
-        else {
+        let min_index = input.frozen_prefix_len.unwrap_or(0);
+
+        let Some(index) = input.ir().get_random_instruction_index_with_min(
+            &mut self.rng,
+            self.generator.requested_context(),
+            min_index,
+        ) else {
             return Ok(MutationResult::Skipped);
         };
 

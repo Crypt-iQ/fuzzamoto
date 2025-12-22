@@ -124,6 +124,15 @@ impl Program {
         rng: &mut R,
         context: InstructionContext,
     ) -> Option<usize> {
+        self.get_random_instruction_index_with_min(rng, context, 0)
+    }
+
+    pub fn get_random_instruction_index_with_min<R: RngCore>(
+        &self,
+        rng: &mut R,
+        context: InstructionContext,
+        min_index: usize,
+    ) -> Option<usize> {
         let mut scope_counter = 0;
         let mut scopes = vec![Scope {
             begin: None,
@@ -132,10 +141,13 @@ impl Program {
         }];
         let mut contexts = Vec::new();
         contexts.reserve(self.instructions.len());
-        contexts.push(0);
+
+        if min_index == 0 {
+            contexts.push(0);
+        }
 
         for (i, instr) in self.instructions.iter().enumerate() {
-            if scopes.last().unwrap().context == context {
+            if scopes.last().unwrap().context == context && i >= min_index {
                 contexts.push(i);
             }
 

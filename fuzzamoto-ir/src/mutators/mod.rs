@@ -20,6 +20,17 @@ pub type MutatorResult = Result<(), MutatorError>;
 
 pub trait Mutator<R: RngCore> {
     fn mutate(&mut self, program: &mut Program, rng: &mut R) -> MutatorResult;
+
+    /// Mutate the program, only considering instructions with index >= min_index.
+    fn mutate_from(
+        &mut self,
+        program: &mut Program,
+        rng: &mut R,
+        _min_index: usize,
+    ) -> MutatorResult {
+        self.mutate(program, rng)
+    }
+
     fn name(&self) -> &'static str;
 }
 
@@ -31,4 +42,15 @@ pub trait Splicer<R: RngCore>: Mutator<R> {
         splice_with: &Program,
         rng: &mut R,
     ) -> MutatorResult;
+
+    /// Splice two programs together, only considering instructions with index >= min_index.
+    fn splice_from(
+        &mut self,
+        program: &mut Program,
+        splice_with: &Program,
+        rng: &mut R,
+        _min_index: usize,
+    ) -> MutatorResult {
+        self.splice(program, splice_with, rng)
+    }
 }

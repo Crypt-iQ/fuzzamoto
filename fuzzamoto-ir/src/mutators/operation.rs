@@ -23,11 +23,20 @@ pub struct OperationMutator<M> {
 
 impl<R: RngCore, M: OperationByteMutator> Mutator<R> for OperationMutator<M> {
     fn mutate(&mut self, program: &mut Program, rng: &mut R) -> MutatorResult {
+        self.mutate_from(program, rng, 0)
+    }
+
+    fn mutate_from(
+        &mut self,
+        program: &mut Program,
+        rng: &mut R,
+        min_index: usize,
+    ) -> MutatorResult {
         let Some(candidate_instruction) = program
             .instructions
             .iter_mut()
             .enumerate()
-            .filter(|(_, instr)| instr.is_operation_mutable())
+            .filter(|(i, instr)| *i >= min_index && instr.is_operation_mutable())
             .choose(rng)
         else {
             return Err(super::MutatorError::NoMutationsAvailable);
