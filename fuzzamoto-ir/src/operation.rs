@@ -141,6 +141,9 @@ pub enum Operation {
     SendFilterLoad,
     SendFilterAdd,
     SendFilterClear,
+
+    /// Snapshot creation
+    IncrementalSnapshot,
     // TODO: SendCompactBlock
     // TODO: SendGetBlockTxn
     // TODO: SendBlockTxn
@@ -306,6 +309,7 @@ impl fmt::Display for Operation {
             Operation::SendFilterLoad => write!(f, "SendFilterLoad"),
             Operation::SendFilterAdd => write!(f, "SendFilterAdd"),
             Operation::SendFilterClear => write!(f, "SendFilterClear"),
+            Operation::IncrementalSnapshot => write!(f, "IncrementalSnapshot"),
         }
     }
 }
@@ -422,7 +426,8 @@ impl Operation {
             | Operation::EndBuildCoinbaseTx
             | Operation::EndBuildCoinbaseTxOutputs
             | Operation::BuildCoinbaseTxInput
-            | Operation::AddCoinbaseTxOutput => false,
+            | Operation::AddCoinbaseTxOutput
+            | Operation::IncrementalSnapshot => false,
         }
     }
 
@@ -535,7 +540,8 @@ impl Operation {
             | Operation::BeginBuildCoinbaseTx
             | Operation::BeginBuildCoinbaseTxOutputs
             | Operation::BuildCoinbaseTxInput
-            | Operation::AddCoinbaseTxOutput => false,
+            | Operation::AddCoinbaseTxOutput
+            | Operation::IncrementalSnapshot => false,
         }
     }
 
@@ -670,6 +676,8 @@ impl Operation {
             Operation::SendFilterLoad => vec![],
             Operation::SendFilterAdd => vec![],
             Operation::SendFilterClear => vec![],
+
+            Operation::IncrementalSnapshot => vec![],
         }
     }
 
@@ -811,7 +819,8 @@ impl Operation {
             | Operation::BeginBuildInventory
             | Operation::BeginBlockTransactions
             | Operation::BeginWitnessStack
-            | Operation::BuildPayToAnchor => vec![],
+            | Operation::BuildPayToAnchor
+            | Operation::IncrementalSnapshot => vec![],
         }
     }
 
@@ -903,7 +912,8 @@ impl Operation {
             | Operation::EndBuildCoinbaseTx
             | Operation::BuildCoinbaseTxInput
             | Operation::EndBuildCoinbaseTxOutputs
-            | Operation::AddCoinbaseTxOutput => vec![],
+            | Operation::AddCoinbaseTxOutput
+            | Operation::IncrementalSnapshot => vec![],
         }
     }
 }
