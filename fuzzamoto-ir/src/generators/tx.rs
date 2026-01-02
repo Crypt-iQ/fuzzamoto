@@ -1,5 +1,7 @@
+use std::marker::PhantomData;
+
 use crate::{
-    IndexedVariable, Operation, PerTestcaseMetadata, TaprootLeafSpec,
+    IndexedVariable, MempoolTxo, Operation, PerTestcaseMetadata, TaprootLeafSpec,
     generators::{Generator, ProgramBuilder},
 };
 use bitcoin::{
@@ -132,10 +134,21 @@ fn build_outputs<R: RngCore>(
     }
 }
 
-fn build_tx<R: RngCore>(
+fn build_tx_from_txos<R: RngCore>(
     builder: &mut ProgramBuilder,
     rng: &mut R,
     funding_txos: &[IndexedVariable],
+    tx_version: u32,
+    output_amounts: &[(u64, OutputType)],
+) -> (IndexedVariable, Vec<IndexedVariable>) {
+    let txos: Vec<usize> = funding_txos.iter().map(|txo| txo.index).collect();
+    build_tx(builder, rng, &txos, tx_version, output_amounts)
+}
+
+fn build_tx<R: RngCore>(
+    builder: &mut ProgramBuilder,
+    rng: &mut R,
+    funding_txos: &[usize],
     tx_version: u32,
     output_amounts: &[(u64, OutputType)],
 ) -> (IndexedVariable, Vec<IndexedVariable>) {
@@ -153,8 +166,8 @@ fn build_tx<R: RngCore>(
         let sequence_var =
             builder.force_append_expect_output(vec![], &Operation::LoadSequence(0xffff_ffff));
         builder.force_append(
-            vec![mut_inputs_var.index, funding_txo.index, sequence_var.index],
-            &Operation::AddTxInput,
+            vec![mut_inputs_var.index, *funding_txo, sequence_var.index],
+            Operation::AddTxInput,
         );
     }
 
@@ -200,6 +213,135 @@ fn build_tx<R: RngCore>(
     (const_tx_var, outputs)
 }
 
+/// `PredicateTxGenerator` generates transactions that spends the transactions in mempool depending on the given predicate.
+pub struct PredicateTxGenerator<F> {
+    predicate: F,
+    phantom: PhantomData<F>,
+}
+
+impl<F, R: RngCore> Generator<R> for PredicateTxGenerator<F>
+where
+    F: Fn(&MempoolTxo) -> bool,
+{
+    fn generate(
+        &self,
+        builder: &mut ProgramBuilder,
+        rng: &mut R,
+        meta: Option<&PerTestcaseMetadata>,
+    ) -> GeneratorResult {
+        if let Some(meta) = meta
+            && !meta.txo_metadata().txo_entry.is_empty()
+        {
+            let chosen = meta
+                .txo_metadata
+                .choice
+                .expect("We should've chosen a txo to spend by now");
+            let txo = meta
+                .txo_metadata
+                .txo_entry
+                .get(chosen)
+                .expect("Getting the chosen spent txo should always succeed")
+                .definition
+                .0;
+
+            let tx_version = *[1, 2, 3].choose(rng).unwrap(); // 3 = TRUC-violation
+            let amount = (
+                rng.gen_range(5000..100_000_000),
+                get_random_output_type(rng),
+            );
+            let (const_tx_var, _) = build_tx(builder, rng, &[txo], tx_version, &[amount])?;
+
+            let conn_var = builder.get_or_create_random_connection(rng);
+
+            let mut_inventory_var =
+                builder.force_append_expect_output(vec![], Operation::BeginBuildInventory);
+            builder.force_append(
+                vec![mut_inventory_var.index, const_tx_var.index],
+                Operation::AddWtxidInv,
+            );
+            let const_inventory_var = builder.force_append_expect_output(
+                vec![mut_inventory_var.index],
+                Operation::EndBuildInventory,
+            );
+
+            builder.force_append(
+                vec![conn_var.index, const_inventory_var.index],
+                Operation::SendInv,
+            );
+            builder.force_append(vec![conn_var.index, const_tx_var.index], Operation::SendTx);
+
+            Ok(())
+        } else {
+            Ok(())
+        }
+    }
+
+    fn choose_index(
+        &self,
+        program: &crate::Program,
+        rng: &mut R,
+        meta: Option<&mut PerTestcaseMetadata>,
+    ) -> Option<usize> {
+        let meta = meta?;
+        let txo_meta = meta.txo_metadata();
+        let filtered = txo_meta
+            .txo_entry
+            .iter()
+            .enumerate()
+            .filter(|(_, x)| (self.predicate)(*x))
+            .collect::<Vec<_>>();
+
+        let chosen = filtered.choose(rng);
+        if let Some((idx, txo)) = chosen {
+            let (_, inst) = txo.definition;
+            meta.txo_metadata_mut().choice = Some(*idx);
+            program.get_random_instruction_index_from(
+                rng,
+                <Self as Generator<R>>::requested_context(self),
+                inst + 1,
+            )
+        } else {
+            None
+        }
+    }
+
+    fn name(&self) -> &'static str {
+        "PredicateTxGenerator"
+    }
+}
+
+impl<F> PredicateTxGenerator<F> {
+    pub fn new(predicate: F) -> Self {
+        Self {
+            predicate,
+            phantom: PhantomData,
+        }
+    }
+}
+
+impl PredicateTxGenerator<fn(&MempoolTxo) -> bool> {
+    pub fn double_spend() -> Self {
+        Self {
+            predicate: |x: &MempoolTxo| !x.spentby.is_empty(),
+            phantom: PhantomData,
+        }
+    }
+
+    pub fn chain_spend() -> Self {
+        Self {
+            predicate: |x: &MempoolTxo| x.depends.is_empty(),
+            phantom: PhantomData,
+        }
+    }
+
+    pub fn any() -> Self {
+        Self {
+            predicate: |_: &MempoolTxo| true,
+            phantom: PhantomData,
+        }
+    }
+}
+
 /// `SingleTxGenerator` generates instructions for a single new transaction into a program
 #[derive(Default)]
 pub struct SingleTxGenerator;
@@ -228,7 +370,8 @@ impl<R: RngCore> Generator<R> for SingleTxGenerator {
             }
             amounts
         };
-        let (const_tx_var, _) = build_tx(builder, rng, &funding_txos, tx_version, &output_amounts);
+        let (const_tx_var, _) =
+            build_tx_from_txos(builder, rng, &funding_txos, tx_version, &output_amounts)?;
 
         if rng.gen_bool(0.5) {
             let conn_var = builder.get_or_create_random_connection(rng);
@@ -275,7 +418,7 @@ impl<R: RngCore> Generator<R> for OneParentOneChildGenerator {
             return Err(GeneratorError::MissingVariables);
         }
 
-        let (parent_tx_var, parent_output_vars) = build_tx(
+        let (parent_tx_var, parent_output_vars) = build_tx_from_txos(
             builder,
             rng,
             &funding_txos,
@@ -284,8 +427,8 @@ impl<R: RngCore> Generator<R> for OneParentOneChildGenerator {
                 (100_000_000, OutputType::PayToWitnessScriptHash),
                 (10000, OutputType::PayToAnchor),
             ],
-        );
-        let (child_tx_var, _) = build_tx(
+        )?;
+        let (child_tx_var, _) = build_tx_from_txos(
             builder,
             rng,
             &[parent_output_vars.last().unwrap().clone()],
@@ -347,7 +490,7 @@ impl<R: RngCore> Generator<R> for LongChainGenerator {
         // transaction spends the output of the previous transaction
         let mut tx_vars = Vec::new();
         for i in 0..25 {
-            let (tx_var, outputs) = build_tx(
+            let (tx_var, outputs) = build_tx_from_txos(
                 builder,
                 rng,
                 &funding_txos,
@@ -411,7 +554,7 @@ impl<R: RngCore> Generator<R> for LargeTxGenerator {
         let conn_var = builder.get_or_create_random_connection(rng);
 
         for utxo in funding_txos {
-            let (tx_var, _) = build_tx(
+            let (tx_var, _) = build_tx_from_txos(
                 builder,
                 rng,
                 std::slice::from_ref(&utxo),
