@@ -133,6 +133,7 @@ where
                 )
             };
 
+            let current_corpus_id = state.current_corpus_id()?.unwrap();
             state.set_corpus_id(saved_corpus_id)?;
             *state.corpus_mut().current_mut() = Some(saved_corpus_id);
 
@@ -184,6 +185,10 @@ where
                 metadata.corpus_id = None;
                 metadata.current_reuse_count = 0;
             }
+
+            // Restore corpus id
+            state.set_corpus_id(current_corpus_id)?;
+            *state.corpus_mut().current_mut() = Some(current_corpus_id);
         } else {
             // Take a new tmp snapshot, first discarding any existing tmp snapshot
             if qemu_has_tmp {
