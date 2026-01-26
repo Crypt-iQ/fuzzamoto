@@ -109,12 +109,26 @@ pub fn create_nyx_script(
     script.push(format!("echo \"{proxy_script}\" >> ./bitcoind_proxy"));
     script.push("chmod +x ./bitcoind_proxy".to_string());
 
+    if secondary_bitcoind.is_some() {
+        let secondary_proxy_script = format!(
+            "{} LD_LIBRARY_PATH=/tmp LD_BIND_NOW=1 {} ./{} \\$@",
+            asan_options,
+            crash_handler_preload,
+            secondary_bitcoind.unwrap()
+        );
+        script.push("echo \"#!/bin/sh\" > ./bitcoind2_proxy".to_string());
+        script.push(format!(
+            "echo \"{}\" >> ./bitcoind2_proxy",
+            secondary_proxy_script
+        ));
+        script.push("chmod +x ./bitcoind2_proxy".to_string());
+    }
+
     // Run the scenario
     script.push(format!(
-        "RUST_LOG=debug LD_LIBRARY_PATH=/tmp LD_BIND_NOW=1 ./{} ./bitcoind_proxy {} ./{} > log.txt 2>&1",
+        "RUST_LOG=debug LD_LIBRARY_PATH=/tmp LD_BIND_NOW=1 ./{} ./bitcoind_proxy {} ./bitcoind2_proxy > log.txt 2>&1",
         scenario_name,
         rpc_path.unwrap_or(""),
-        secondary_bitcoind.unwrap_or("")
     ));
 
     // Debug info
