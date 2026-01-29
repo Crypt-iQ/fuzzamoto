@@ -88,10 +88,9 @@ where
         assert!(!executor.helper.nyx_process.aux_tmp_snapshot_created());
 
         // Load input in case of eviction
-        // TODO: Use IrInput::try_transform_from instead?
         {
             let mut testcase = state.current_testcase_mut()?;
-            let _ = state.corpus().load_input_into(&mut testcase);
+            let _ = IrInput::try_transform_from(&mut testcase, state)?;
         }
 
         let program_len = {
