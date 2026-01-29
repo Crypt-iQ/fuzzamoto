@@ -20,7 +20,7 @@ use rand::RngCore;
 use crate::{input::IrInput, stages::RuntimeMetadata};
 
 /// Instruction limit for mutated IR programs
-const MAX_INSTRUCTIONS: usize = 4096;
+const MAX_INSTRUCTIONS: usize = 40960;
 
 pub struct IrMutator<M, R> {
     mutator: M,

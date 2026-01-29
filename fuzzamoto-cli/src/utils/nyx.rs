@@ -35,7 +35,7 @@ pub fn generate_nyx_config(nyx_path: &Path, sharedir: &Path) -> Result<()> {
             sharedir.to_str().unwrap(),
             "Kernel",
             "-m",
-            "4096",
+            "40960",
         ],
         Some(&packer_path),
     )?;
