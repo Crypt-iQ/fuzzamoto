@@ -3,9 +3,12 @@ use std::num::NonZeroUsize;
 
 use libafl::{
     Error, HasMetadata,
-    corpus::{Corpus, HasCurrentCorpusId},
+    corpus::HasCurrentCorpusId,
     executors::Executor,
-    stages::{Restartable, Stage},
+    stages::{
+        Restartable, Stage,
+        mutational::MutatedTransform,
+    },
     state::{HasCorpus, HasCurrentTestcase, HasExecutions, HasRand},
 };
 use libafl_bolts::rands::Rand;
