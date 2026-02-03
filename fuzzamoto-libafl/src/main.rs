@@ -25,6 +25,10 @@ use crate::fuzzer::Fuzzer;
 #[cfg(target_os = "linux")]
 pub fn main() {
     env_logger::init();
+    std::panic::set_hook(Box::new(|info| {
+        eprintln!("PANIC: {:?}", info);
+        std::process::abort();
+    }));
     Fuzzer::new().fuzz().unwrap();
 }
 
