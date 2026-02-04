@@ -281,7 +281,9 @@ where
         let mut non_probe_action_count = 0;
 
         let mempool2 = self.inner.target.get_mempool();
-        nyx_print(format!("Mempool state: {:?} {:?}", mempool2, start_index).as_bytes());
+        if program.actions.last().is_some() {
+            nyx_print(format!("Mempool state: {:?} {:?} {:?}", mempool2, start_index, program.actions.last()).as_bytes());
+        }
 
         for (i, action) in program.actions.into_iter().enumerate().skip(start_index) {
             match action {
