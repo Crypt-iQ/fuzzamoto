@@ -279,15 +279,16 @@ where
     ) -> Option<(Vec<u8>, usize)> {
         let message_filter = |(s, _): &(String, Vec<u8>)| ["getblocktxn"].contains(&s.as_str());
         let mut non_probe_action_count = 0;
+
+        let mempool2 = self.inner.target.get_mempool();
+        nyx_print(format!("Mempool state: {:?}", mempool).as_bytes());
+
         for (i, action) in program.actions.into_iter().enumerate().skip(start_index) {
             match action {
                 CompiledAction::SendRawMessage(from, command, message) => {
                     if self.inner.connections.is_empty() {
                         return None;
                     }
-
-                    let mempool = self.inner.target.get_mempool();
-                    nyx_print(format!("Mempool state: {:?}", mempool).as_bytes());
 
                     let num_connections = self.inner.connections.len();
                     let dst = from % num_connections;
