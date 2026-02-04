@@ -26,7 +26,7 @@ pub trait TargetNode: Sized {
     fn is_alive(&self) -> Result<(), String>;
 
     /// Log mempool.
-    fn get_mempool(&self) -> Result<(), String>;
+    fn get_mempool(&self) -> Result<String, String>;
 }
 
 /// `Target` is the interface that the test harness will use to interact with the target Bitcoin

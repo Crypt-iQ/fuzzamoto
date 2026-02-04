@@ -136,10 +136,10 @@ Can you-"#
         let client = &self.node.client;
         let mempool = match client.call::<serde_json::Value>("getmempoolinfo", &[]) {
             Ok(result) => result,
-            Err(_) => return None,
+            Err(_) => return Err("ok"),
         };
 
-        Ok(result)
+        Ok(mempool)
     }
 }
 
