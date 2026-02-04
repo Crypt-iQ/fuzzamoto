@@ -330,7 +330,8 @@ where
                 CompiledAction::IncrementalSnapshot => {
                     // If we're creating a new incremental snapshot, we want to save the index to skip
                     // ahead to.
-                    let prefix_index = i + 1;
+                    let prefix_index = i + 1; 
+                    nyx_print(format!("IncrementalSnapshot being made {:?}", prefix_index).as_bytes());
                     let (new_payload, action_pos) =
                         runner.create_incremental_and_next(prefix_index);
                     return Some((new_payload, action_pos));
