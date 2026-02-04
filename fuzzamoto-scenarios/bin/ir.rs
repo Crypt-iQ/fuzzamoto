@@ -287,7 +287,7 @@ where
                     }
 
                     let mempool = self.inner.target.get_mempool();
-                    log::info!("mempool info: {:?}", mempool);
+                    nyx_print(format!("Mempool state: {:?}", mempool).as_bytes());
 
                     let num_connections = self.inner.connections.len();
                     let dst = from % num_connections;
