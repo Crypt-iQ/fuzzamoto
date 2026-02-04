@@ -130,6 +130,17 @@ Can you-"#
 
         Ok(())
     }
+
+    fn get_mempool(&self) -> Result<String, String> {
+        // Call getmempoolinfo
+        let client = &self.node.client;
+        let mempool = match client.call::<serde_json::Value>("getmempoolinfo", &[]) {
+            Ok(result) => result,
+            Err(_) => return None,
+        };
+
+        Ok(result)
+    }
 }
 
 impl Target<V1Transport> for BitcoinCoreTarget {
