@@ -449,7 +449,7 @@ where
         let mutation_stage = TuneableMutationalStage::new(&mut state, mutator);
 
         let incremental_snapshot_stage =
-            IncrementalSnapshotStage::new(mutation_stage, SnapshotPlacementPolicy::Balanced, 50);
+            IncrementalSnapshotStage::new(self.options.incremental_snapshots, mutation_stage, SnapshotPlacementPolicy::Balanced, 50);
 
         let mut stages = tuple_list!(
             ClosureStage::new(|_a: &mut _, _b: &mut _, _c: &mut _, _d: &mut _| {
