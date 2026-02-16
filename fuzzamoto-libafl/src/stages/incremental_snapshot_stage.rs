@@ -118,6 +118,7 @@ where
 
         // Use the root snapshot if this input does not get closer to the 1000 mempool
         // assertion.
+        let mut has_meta = false;
         {
             let testcase = state.current_testcase()?;
             if let Ok(meta) = testcase.metadata::<AssertionMetadata>() {
@@ -125,9 +126,12 @@ where
                 for k in meta.assertions.keys() {
                     log::info!("AssertionMetadata key: {k}");
                 }
-            } else {
-                return self.inner_stage.perform(fuzzer, executor, state, manager);
+                has_meta = true;
             }
+        }
+
+        if !has_meta {
+            return self.inner_stage.perform(fuzzer, executor, state, manager);
         }
 
         let chosen_pos = self.choose_position(state.rand_mut(), program_len);
