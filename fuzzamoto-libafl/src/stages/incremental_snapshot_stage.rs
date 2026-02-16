@@ -15,7 +15,7 @@ use fuzzamoto_ir::Program;
 
 use crate::input::IrInput;
 
-use crate::feedbacks::assertions::AssertionMetadata
+use crate::feedbacks::assertions::AssertionMetadata;
 
 #[derive(Debug, Clone, Copy)]
 pub enum SnapshotPlacementPolicy {
@@ -122,7 +122,7 @@ where
             let testcase = state.current_testcase()?;
             if let Ok(meta) = testcase.metadata::<AssertionMetadata>() {
                 // log the assertions here
-                for k in meta.keys() {
+                for k in meta.assertions.keys() {
                     log::info!("AssertionMetadata key: {k}");
                 }
             } else {
