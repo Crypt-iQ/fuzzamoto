@@ -15,6 +15,8 @@ use fuzzamoto_ir::Program;
 
 use crate::input::IrInput;
 
+use feedbacks::assertions::AssertionMetadata
+
 #[derive(Debug, Clone, Copy)]
 pub enum SnapshotPlacementPolicy {
     Balanced,
@@ -54,17 +56,13 @@ impl<IS, S, OT> IncrementalSnapshotStage<IS, S, OT> {
             SnapshotPlacementPolicy::Balanced => {
                 if program_len == 1 {
                     Some(0)
-                } else if rand.coinflip(0.5_f64) {
-                    // First half
-                    let half = (program_len / 2).max(1);
-                    let nz_half = NonZeroUsize::new(half).expect("half should be non-zero");
-                    Some(rand.below(nz_half))
                 } else {
-                    // Second half
+                    // Upper quartile
                     let half = program_len / 2;
-                    let range = program_len - half;
+                    let quartile = program_len / 4;
+                    let range = quartile;
                     let nz_range = NonZeroUsize::new(range).expect("range should be non-zero");
-                    Some(half + rand.below(nz_range))
+                    Some(half + quartile + rand.below(nz_range))
                 }
             }
         }
@@ -116,6 +114,20 @@ where
         if state.rand_mut().coinflip(0.04) {
             // Use the root snapshot some of the time
             return self.inner_stage.perform(fuzzer, executor, state, manager);
+        }
+
+        // Use the root snapshot if this input does not get closer to the 1000 mempool
+        // assertion.
+        {
+            let testcase = state.current_testcase()?;
+            if let Ok(meta) = testcase.metadata::<AssertionMetadata>() {
+                // log the assertions here
+                for k in meta.keys() {
+                    log::info!("AssertionMetadata key: {k}");
+                }
+            } else {
+                return self.inner_stage.perform(fuzzer, executor, state, manager);
+            }
         }
 
         let chosen_pos = self.choose_position(state.rand_mut(), program_len);
