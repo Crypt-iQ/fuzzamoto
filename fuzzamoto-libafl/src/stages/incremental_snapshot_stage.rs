@@ -15,7 +15,7 @@ use fuzzamoto_ir::Program;
 
 use crate::input::IrInput;
 
-use feedbacks::assertions::AssertionMetadata
+use crate::feedbacks::assertions::AssertionMetadata
 
 #[derive(Debug, Clone, Copy)]
 pub enum SnapshotPlacementPolicy {
