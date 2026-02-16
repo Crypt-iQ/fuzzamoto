@@ -54,16 +54,12 @@ impl<IS, S, OT> IncrementalSnapshotStage<IS, S, OT> {
 
         match self.policy {
             SnapshotPlacementPolicy::Balanced => {
-                if program_len == 1 {
-                    Some(0)
-                } else {
-                    // Upper quartile
-                    let half = program_len / 2;
-                    let quartile = program_len / 4;
-                    let range = quartile;
-                    let nz_range = NonZeroUsize::new(range).expect("range should be non-zero");
-                    Some(half + quartile + rand.below(nz_range))
-                }
+                // Upper quartile
+                let half = program_len / 2;
+                let quartile = program_len / 4;
+                let range = quartile;
+                let nz_range = NonZeroUsize::new(range).expect("range should be non-zero");
+                Some(half + quartile + rand.below(nz_range))
             }
         }
     }
@@ -106,7 +102,7 @@ where
             input.ir().instructions.len()
         };
 
-        if program_len == 0 {
+        if program_len <= 500 {
             // Skip creating an incremental snapshot if we're using the empty program
             return self.inner_stage.perform(fuzzer, executor, state, manager);
         }
