@@ -470,7 +470,7 @@ where
             self.options.incremental_snapshots,
             mutation_stage,
             SnapshotPlacementPolicy::Balanced,
-            50,
+            250,
             9999999,
         );
 
