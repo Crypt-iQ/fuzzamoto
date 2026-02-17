@@ -127,7 +127,7 @@ where
                 // log the assertions here
                 for v in meta.assertions.values() {
                     let distance = v.distance();
-                    if distance < self.current_distance + 10 {
+                    if distance < self.current_distance + 2 {
                         has_meta = true;
                         log::info!("distance updated {distance} cur: {0}", self.current_distance);
                     }
