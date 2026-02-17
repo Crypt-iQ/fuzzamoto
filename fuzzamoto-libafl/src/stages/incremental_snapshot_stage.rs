@@ -139,7 +139,7 @@ where
             }
         }
 
-        if !has_meta && assertions {
+        if !has_meta && self.assertions {
             return self.inner_stage.perform(fuzzer, executor, state, manager);
         }
 
