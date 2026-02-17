@@ -472,6 +472,7 @@ where
             SnapshotPlacementPolicy::Balanced,
             250,
             9999999,
+            self.client_description.core_id().0 % 5 == 1,
         );
 
         let mut stages = tuple_list!(

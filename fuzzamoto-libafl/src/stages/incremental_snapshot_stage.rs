@@ -28,6 +28,7 @@ pub struct IncrementalSnapshotStage<IS, S, OT> {
     policy: SnapshotPlacementPolicy,
     max_reuse_count: usize,
     current_distance: u64,
+    assertions: bool,
     phantom: PhantomData<(S, OT)>,
 }
 
@@ -38,6 +39,7 @@ impl<IS, S, OT> IncrementalSnapshotStage<IS, S, OT> {
         policy: SnapshotPlacementPolicy,
         max_reuse_count: usize,
         current_distance: u64,
+        assertions: bool,
     ) -> Self {
         Self {
             enabled,
@@ -45,6 +47,7 @@ impl<IS, S, OT> IncrementalSnapshotStage<IS, S, OT> {
             policy,
             max_reuse_count,
             current_distance,
+            assertions,
             phantom: PhantomData,
         }
     }
@@ -136,7 +139,7 @@ where
             }
         }
 
-        if !has_meta {
+        if !has_meta && assertions {
             return self.inner_stage.perform(fuzzer, executor, state, manager);
         }
 

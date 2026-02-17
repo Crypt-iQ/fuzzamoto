@@ -122,6 +122,8 @@ where
         {
             self.last_update = Some(now);
 
+            log::info!("Assertions written: {output_file:?}");
+
             let mut output_file = OpenOptions::new()
                 .create(true)
                 .write(true)
