@@ -471,6 +471,7 @@ where
             mutation_stage,
             SnapshotPlacementPolicy::Balanced,
             50,
+            9999999,
         );
 
         let mut stages = tuple_list!(

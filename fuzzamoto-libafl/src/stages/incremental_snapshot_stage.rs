@@ -37,13 +37,14 @@ impl<IS, S, OT> IncrementalSnapshotStage<IS, S, OT> {
         inner_stage: IS,
         policy: SnapshotPlacementPolicy,
         max_reuse_count: usize,
+        current_distance: u64,
     ) -> Self {
         Self {
             enabled,
             inner_stage,
             policy,
             max_reuse_count,
-            99999999u64,
+            current_distance,
             phantom: PhantomData,
         }
     }
