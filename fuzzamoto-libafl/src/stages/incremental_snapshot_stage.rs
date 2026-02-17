@@ -119,8 +119,8 @@ where
             let testcase = state.current_testcase()?;
             if let Ok(meta) = testcase.metadata::<AssertionMetadata>() {
                 // log the assertions here
-                for k in meta.assertions.keys() {
-                    log::info!("AssertionMetadata key: {k}");
+                for v in meta.assertions.values() {
+                    log::info!("AssertionMetadata value: {v}");
                 }
                 has_meta = true;
             }
