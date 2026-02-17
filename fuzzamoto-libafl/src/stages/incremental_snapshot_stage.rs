@@ -126,7 +126,7 @@ where
                     let distance = v.distance();
                     if distance < self.current_distance + 10 {
                         has_meta = true;
-                        log::info!("distance updated {distance} cur: {self.current_distance}");
+                        log::info!("distance updated {distance} cur: {0}", self.current_distance);
                     }
                     if distance < self.current_distance {
                         self.current_distance = distance;
