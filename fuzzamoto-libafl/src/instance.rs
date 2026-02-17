@@ -20,10 +20,10 @@ use libafl::{
     },
     executors::Executor,
     feedback_and, feedback_and_fast, feedback_or, feedback_or_fast,
-    feedbacks::{ConstFeedback, CrashFeedback, HasObserverHandle, MaxMapFeedback, TimeFeedback},
+    feedbacks::{ConstFeedback, CrashFeedback, HasObserverHandle, MaxMapFeedback},
     fuzzer::{Evaluator, Fuzzer, StdFuzzer},
     mutators::{ComposedByMutations, TuneableScheduledMutator},
-    observers::{CanTrack, HitcountsMapObserver, StdMapObserver, StdOutObserver, TimeObserver},
+    observers::{CanTrack, HitcountsMapObserver, StdMapObserver, StdOutObserver},
     schedulers::{
         IndexesLenTimeMinimizerScheduler, QueueScheduler, StdWeightedScheduler,
         powersched::PowerSchedule,
