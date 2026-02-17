@@ -123,11 +123,13 @@ where
             if let Ok(meta) = testcase.metadata::<AssertionMetadata>() {
                 // log the assertions here
                 for v in meta.assertions.values() {
-                    if v.distance() < self.current_distance + 10 {
+                    let distance = v.distance();
+                    if distance < self.current_distance + 10 {
                         has_meta = true;
+                        log::info!("distance updated {distance} cur: {self.current_distance}");
                     }
-                    if v.distance() < self.current_distance {
-                        self.current_distance = v.distance();
+                    if distance < self.current_distance {
+                        self.current_distance = distance;
                     }
                     log::info!("AssertionMetadata value: {v:?}");
                 }
