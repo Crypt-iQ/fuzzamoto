@@ -142,7 +142,7 @@ where
         .track_novelties();
 
         // Create an observation channel to keep track of the execution time
-        let time_observer = TimeObserver::new("time");
+        //let time_observer = TimeObserver::new("time");
 
         let stdout_observer = StdOutObserver::new(Cow::Borrowed("hprintf_output")).unwrap();
 
@@ -193,7 +193,7 @@ where
                 ),
             ),
             // Time feedback
-            TimeFeedback::new(&time_observer),
+            //TimeFeedback::new(&time_observer),
         );
 
         let enable_capture_timeouts = Rc::new(RefCell::new(true));
@@ -269,7 +269,7 @@ where
             )
         };
 
-        let observers = tuple_list!(trace_observer, time_observer, stdout_observer);
+        let observers = tuple_list!(trace_observer, /*time_observer,*/ stdout_observer);
 
         state.set_max_size(self.options.buffer_size);
 
