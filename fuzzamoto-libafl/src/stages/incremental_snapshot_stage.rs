@@ -120,7 +120,7 @@ where
             if let Ok(meta) = testcase.metadata::<AssertionMetadata>() {
                 // log the assertions here
                 for v in meta.assertions.values() {
-                    log::info!("AssertionMetadata value: {v}");
+                    log::info!("AssertionMetadata value: {v:?}");
                 }
                 has_meta = true;
             }
