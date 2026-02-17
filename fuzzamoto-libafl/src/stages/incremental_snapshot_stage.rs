@@ -27,6 +27,7 @@ pub struct IncrementalSnapshotStage<IS, S, OT> {
     inner_stage: IS,
     policy: SnapshotPlacementPolicy,
     max_reuse_count: usize,
+    current_distance: u64,
     phantom: PhantomData<(S, OT)>,
 }
 
@@ -42,6 +43,7 @@ impl<IS, S, OT> IncrementalSnapshotStage<IS, S, OT> {
             inner_stage,
             policy,
             max_reuse_count,
+            99999999u64,
             phantom: PhantomData,
         }
     }
@@ -120,9 +122,14 @@ where
             if let Ok(meta) = testcase.metadata::<AssertionMetadata>() {
                 // log the assertions here
                 for v in meta.assertions.values() {
+                    if v.distance() < self.current_distance + 10 {
+                        has_meta = true;
+                    }
+                    if v.distance() < self.current_distance {
+                        self.current_distance = v.distance();
+                    }
                     log::info!("AssertionMetadata value: {v:?}");
                 }
-                has_meta = true;
             }
         }
 
