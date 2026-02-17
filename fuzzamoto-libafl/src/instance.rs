@@ -466,13 +466,20 @@ where
 
         let mutation_stage = TuneableMutationalStage::new(&mut state, mutator);
 
+        let use_assertions = self.client_description.core_id().0 % 5 == 1;
+
+        let mut reuse_count = 50;
+        if use_assertions {
+            reuse_count = 1000;
+        }
+
         let incremental_snapshot_stage = IncrementalSnapshotStage::new(
             self.options.incremental_snapshots,
             mutation_stage,
             SnapshotPlacementPolicy::Balanced,
-            250,
+            reuse_count,
             9999999,
-            self.client_description.core_id().0 % 5 == 1,
+            use_assertions,
         );
 
         let mut stages = tuple_list!(
