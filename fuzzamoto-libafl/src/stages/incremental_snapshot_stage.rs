@@ -163,6 +163,7 @@ where
                 let mut testcase = state.current_testcase_mut()?;
                 let input = testcase.input_mut().as_mut().unwrap();
                 input.frozen_prefix_len = Some(prefix_len);
+                input.first_run = Some(true);
             }
 
             log::info!("Created incremental snapshot at position {prefix_len}");
@@ -184,6 +185,13 @@ where
                 } else {
                     self.inner_stage.perform(fuzzer, executor, state, manager)?;
                 }
+
+                // Take the input, set first_run to false.
+                {
+                    let mut testcase = state.current_testcase_mut()?;
+                    let input = testcase.input_mut().as_mut().unwrap();
+                    input.first_run = Some(false);
+                }
             }
 
             // Reset frozen_prefix_len
@@ -191,6 +199,7 @@ where
                 let mut testcase = state.current_testcase_mut()?;
                 let input = testcase.input_mut().as_mut().unwrap();
                 input.frozen_prefix_len = None;
+                input.first_run = None;
             }
         } else {
             log::info!("No valid position to create incremental snapshot",);

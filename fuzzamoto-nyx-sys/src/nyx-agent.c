@@ -209,7 +209,7 @@ size_t nyx_get_fuzz_input(const uint8_t *data, size_t max_size) {
  *  prefix for later restores.
  */
 size_t nyx_create_incremental_and_next(const uint8_t *data, size_t *prefix_index) {
-  static size_t saved_prefix_index = 0;
+  size_t saved_prefix_index = 0;
 
   // Save the prefix index before taking the snapshot
   saved_prefix_index = *prefix_index;

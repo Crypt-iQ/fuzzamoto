@@ -78,6 +78,8 @@ pub fn nyx_print(bytes: &[u8]) {
 
 pub struct TestCase {
     program: CompiledProgram,
+    #[serde(skip)]
+    og_bytes: Vec<u8>
 }
 
 fn probe_result_mapper(
@@ -135,7 +137,8 @@ impl<'a> ScenarioInput<'a> for TestCase {
         } else {
             postcard::from_bytes(bytes).map_err(|e| e.to_string())?
         };
-        Ok(Self { program })
+        let owned = bytes.to_vec();
+        Ok(Self { program, owned })
     }
 }
 
@@ -536,10 +539,38 @@ where
         let mut program = testcase.program;
         let mut start_index = 0;
 
+        // See if taking the existing testcase up to the frozen_prefix_len
+        // and then tacking on the extra bytes, compiling is faster
+        // 1. modify target_bytes to return post-snapshot data
+        //    - only when we already have taken a snapshot though...
+        //    - if we haven't taken a snapshot yet,
+        // 2. splice the payload here before calling decode which compile?
+
+        // TODO: Pass in new metadata, we're using the *old* metadata after compile!
+        // ... maybe? metadata is only used if recording_received_messages which means probing?
+        // unsure, maybe the metadata is propagated
+
         while let Some((new_payload, action_pos)) =
             self.process_actions(program, start_index, runner)
         {
-            let new_testcase = match TestCase::decode(&new_payload) {
+            // If we are here, then we have taken the snapshot.
+            // skips rest of first input post-snapshot? not ideal. means coverage counters off?
+            // is there any way to disable the coverage for that input? or simply resume execution, then
+            // on the next reset, grab the payload.
+
+            // the "snippet" does not have the snapshot opcode
+            // we need to have <program>[:start_index] <snippet> passed into decode
+            // then only pass in "snippet" to process_actions
+
+            // assert there's no snapshot opcode in the "snippet"
+            //program is CompiledProgram which has <actions, metadata>, we want to combine this "program"
+            // with our snippet. How can we do this?
+
+            // testcase.program.og_bytes[:action_pos] + new_payload
+            let mut p = testcase.program.og_bytes[:action_pos].to_vec(); // could be snapshotted
+            p.extend_from_slice(&new_payload);
+
+            let new_testcase = match TestCase::decode(&p) {
                 Ok(tc) => tc,
                 Err(e) => {
                     log::warn!(

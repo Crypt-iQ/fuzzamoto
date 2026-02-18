@@ -12,6 +12,9 @@ pub struct IrInput {
     /// is injected here during execution.
     #[serde(skip)]
     pub frozen_prefix_len: Option<usize>,
+    /// First run
+    #[serde(skip)]
+    pub first_run: Option<bool>,
 }
 
 impl Input for IrInput {}
@@ -21,6 +24,7 @@ impl IrInput {
         Self {
             ir,
             frozen_prefix_len: None,
+            first_run: None,
         }
     }
 
@@ -41,23 +45,30 @@ impl IrInput {
         Self {
             ir: program,
             frozen_prefix_len: None,
+            first_run: None,
         }
     }
 
     fn insert_snapshot(&self) -> Program {
         if let Some(prefix_len) = self.frozen_prefix_len {
-            let mut instructions = self.ir.instructions.clone();
+            if let Some(first_run) = self.first_run {
+                let mut instructions = self.ir.instructions.clone();
 
-            // Insert snapshot opcode at the frozen prefix position
-            let snapshot_instr = Instruction {
-                inputs: vec![],
-                operation: Operation::IncrementalSnapshot,
-            };
+                // Insert snapshot opcode at the frozen prefix position
+                let snapshot_instr = Instruction {
+                    inputs: vec![],
+                    operation: Operation::IncrementalSnapshot,
+                };
 
-            let insert_pos = prefix_len.min(instructions.len());
-            instructions.insert(insert_pos, snapshot_instr);
+                let insert_pos = prefix_len.min(instructions.len());
+                instructions.insert(insert_pos, snapshot_instr);
 
-            Program::unchecked_new(self.ir.context.clone(), instructions)
+                Program::unchecked_new(self.ir.context.clone(), instructions)
+            } else {
+                let insert_pos = prefix_len.min(instructions.len());
+                let instructions = self.ir.instructions[insert_pos..].to_vec();
+                Program::unchecked_new(self.ir.context.clone(), instructions)
+            }
         } else {
             self.ir.clone()
         }

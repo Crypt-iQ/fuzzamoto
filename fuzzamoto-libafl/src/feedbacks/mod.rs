@@ -87,6 +87,7 @@ where
             // If we're using incremental snapshots, clear frozen_prefix_len.
             let mut timeout_input = input.clone();
             timeout_input.frozen_prefix_len = None;
+            timeout_input.first_run = None;
             timeouts.push(timeout_input);
             return Ok(false);
         }
