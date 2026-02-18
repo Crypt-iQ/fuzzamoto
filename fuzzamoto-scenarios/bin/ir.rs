@@ -137,7 +137,7 @@ impl<'a> ScenarioInput<'a> for TestCase {
             postcard::from_bytes(bytes).map_err(|e| e.to_string())?
         };
         let og_bytes = bytes.to_vec();
-        Ok(Self { program, owned })
+        Ok(Self { program, og_bytes })
     }
 }
 
@@ -386,7 +386,7 @@ where
                     self.futurest = std::cmp::max(self.futurest, time);
                 }
                 CompiledAction::IncrementalSnapshot => {
-                    assert(!has_inc);
+                    assert!(!has_inc);
                     has_inc = true;
                     // If we're creating a new incremental snapshot, we want to save the index to skip
                     // ahead to.
@@ -568,8 +568,8 @@ where
             //program is CompiledProgram which has <actions, metadata>, we want to combine this "program"
             // with our snippet. How can we do this?
 
-            // testcase.program.og_bytes[:action_pos] + new_payload
-            let mut p = testcase.program.og_bytes[..action_pos].to_vec(); // could be snapshotted
+            // testcase.og_bytes[:action_pos] + new_payload
+            let mut p = testcase.og_bytes[..action_pos].to_vec(); // could be snapshotted
             p.extend_from_slice(&new_payload);
 
             let new_testcase = match TestCase::decode(&p) {
