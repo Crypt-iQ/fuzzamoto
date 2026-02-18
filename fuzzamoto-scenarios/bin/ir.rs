@@ -388,6 +388,9 @@ where
                 CompiledAction::IncrementalSnapshot => {
                     assert!(!has_inc);
                     has_inc = true;
+                    if has_inc {
+                        log::info!("has_inc {has_inc}");
+                    }
                     // If we're creating a new incremental snapshot, we want to save the index to skip
                     // ahead to.
                     let prefix_index = i + 1;
