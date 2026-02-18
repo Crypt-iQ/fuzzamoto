@@ -78,7 +78,6 @@ pub fn nyx_print(bytes: &[u8]) {
 
 pub struct TestCase {
     program: CompiledProgram,
-    #[serde(skip)]
     og_bytes: Vec<u8>
 }
 
@@ -137,7 +136,7 @@ impl<'a> ScenarioInput<'a> for TestCase {
         } else {
             postcard::from_bytes(bytes).map_err(|e| e.to_string())?
         };
-        let owned = bytes.to_vec();
+        let og_bytes = bytes.to_vec();
         Ok(Self { program, owned })
     }
 }
@@ -285,6 +284,7 @@ where
     ) -> Option<(Vec<u8>, usize)> {
         let message_filter = |(s, _): &(String, Vec<u8>)| ["getblocktxn"].contains(&s.as_str());
         let mut non_probe_action_count = 0;
+        let mut has_inc = false;
         for (i, action) in program.actions.into_iter().enumerate().skip(start_index) {
             match action {
                 CompiledAction::Connect(_node, connection_type) => {
@@ -386,6 +386,8 @@ where
                     self.futurest = std::cmp::max(self.futurest, time);
                 }
                 CompiledAction::IncrementalSnapshot => {
+                    assert(!has_inc);
+                    has_inc = true;
                     // If we're creating a new incremental snapshot, we want to save the index to skip
                     // ahead to.
                     let prefix_index = i + 1;
@@ -567,7 +569,7 @@ where
             // with our snippet. How can we do this?
 
             // testcase.program.og_bytes[:action_pos] + new_payload
-            let mut p = testcase.program.og_bytes[:action_pos].to_vec(); // could be snapshotted
+            let mut p = testcase.program.og_bytes[..action_pos].to_vec(); // could be snapshotted
             p.extend_from_slice(&new_payload);
 
             let new_testcase = match TestCase::decode(&p) {
