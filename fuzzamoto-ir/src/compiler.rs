@@ -323,6 +323,8 @@ impl Compiler {
 
         self.connection_counter = ir.context.num_connections;
 
+        let mut has_inc = false;
+
         for instruction in &ir.instructions {
             let actions_before = self
                 .output
@@ -399,6 +401,8 @@ impl Compiler {
                 }
 
                 Operation::IncrementalSnapshot => {
+                    assert!(!has_inc);
+                    has_inc = true;
                     self.output
                         .actions
                         .push(CompiledAction::IncrementalSnapshot);
