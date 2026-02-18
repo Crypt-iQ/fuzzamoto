@@ -65,7 +65,7 @@ impl IrInput {
 
                 Program::unchecked_new(self.ir.context.clone(), instructions)
             } else {
-                let insert_pos = prefix_len.min(instructions.len());
+                let insert_pos = prefix_len.min(self.ir.instructions.len());
                 let instructions = self.ir.instructions[insert_pos..].to_vec();
                 Program::unchecked_new(self.ir.context.clone(), instructions)
             }
