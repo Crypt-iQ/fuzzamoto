@@ -78,7 +78,6 @@ pub fn nyx_print(bytes: &[u8]) {
 
 pub struct TestCase {
     program: CompiledProgram,
-    og_bytes: Vec<u8>
 }
 
 fn probe_result_mapper(
@@ -139,8 +138,7 @@ impl<'a> ScenarioInput<'a> for TestCase {
             postcard::from_bytes(bytes).map_err(|e| e.to_string())?
         };
         log::info!("post compiler.compile");
-        let og_bytes = bytes.to_vec();
-        Ok(Self { program, og_bytes })
+        Ok(Self { program })
     }
 }
 
@@ -575,12 +573,37 @@ where
             // with our snippet. How can we do this?
 
             // testcase.og_bytes[:action_pos] + new_payload
-            log::info!("to_vec()");
-            let mut p = testcase.og_bytes[..action_pos].to_vec(); // could be snapshotted
-            log::info!("extend_from_slice");
-            p.extend_from_slice(&new_payload);
+
+            let mut p : Vec<Instruction> = testcase.program.instructions[..action_pos].to_vec(); // Vec<Instruction>
+            log::info!("postcard from bytes");
+
+            let snippet = match postcard::from_bytes::<Program>(&new_payload) {
+                Ok(p) => p,
+                Err(e) => {
+                    log::warn!("Failed to decode snippet {e:?}");
+                    runner.skip();
+                    return ScenarioResult::Skip;
+                }
+            };
+
+            p.extend_from_slice(&snippet.instructions);
+
             log::info!("post-extend from slice");
 
+            let mut prog: Program = Program::unchecked_new(testcase.program.context.clone(), p)
+
+            log::info!("pre-compile");
+            let mut compiler = Compiler::new();
+            let mut cprog: CompiledProgram = match compiler.compile(&prog) {
+                Ok(p) => p,
+                Err(e) => {
+                    log::warn!("Failed to compile {e:?}");
+                    runner.skip();
+                    return ScenarioResult::Skip;
+                }
+            };
+
+            /*
             let new_testcase = match TestCase::decode(&p) {
                 Ok(tc) => tc,
                 Err(e) => {
@@ -590,6 +613,11 @@ where
                     runner.skip();
                     return ScenarioResult::Skip;
                 }
+            };
+            */
+
+            let new_testcase = TestCase {
+                program: cprog,
             };
 
             log::info!("post TestCase::decode");
