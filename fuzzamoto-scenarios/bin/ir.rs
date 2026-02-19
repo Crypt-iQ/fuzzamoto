@@ -562,7 +562,7 @@ where
                 .position(|instr| matches!(instr.operation, Operation::IncrementalSnapshot))
                 .unwrap();
 
-            let mut p = testcase.ir.instructions[..pos.to_vec(); // Vec<Instruction>
+            let mut p = testcase.ir.instructions[..pos].to_vec(); // Vec<Instruction>
 
             log::info!("postcard from bytes");
 
