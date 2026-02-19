@@ -51,7 +51,7 @@ impl IrInput {
 
     fn insert_snapshot(&self) -> Program {
         if let Some(prefix_len) = self.frozen_prefix_len {
-            if let Some(first_run) = self.first_run {
+            if self.first_run.is_some() {
                 let mut instructions = self.ir.instructions.clone();
 
                 // Insert snapshot opcode at the frozen prefix position
