@@ -579,11 +579,11 @@ where
 
             log::info!("post-extend from slice");
 
-            let mut prog: Program = Program::unchecked_new(testcase.ir.context.clone(), p);
+            let prog: Program = Program::unchecked_new(testcase.ir.context.clone(), p);
 
             log::info!("pre-compile");
             let mut compiler = Compiler::new();
-            let mut cprog: CompiledProgram = match compiler.compile(&prog) {
+            let cprog: CompiledProgram = match compiler.compile(&prog) {
                 Ok(p) => p,
                 Err(e) => {
                     log::warn!("Failed to compile {e:?}");
