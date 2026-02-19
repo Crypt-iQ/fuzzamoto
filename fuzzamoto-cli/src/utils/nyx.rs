@@ -71,6 +71,9 @@ pub fn create_nyx_script(
         script.push(format!("./hget {rpc_path} {rpc_path}"));
     }
 
+    script.push("./hget perf perf".to_string());
+    script.push("chmod +x perf".to_string());
+
     // Make executables
     for exe in &["habort", "hcat", "ld-linux-x86-64.so.2", crash_handler_name] {
         script.push(format!("chmod +x {exe}"));
@@ -109,8 +112,10 @@ pub fn create_nyx_script(
     script.push(format!("echo \"{proxy_script}\" >> ./bitcoind_proxy"));
     script.push("chmod +x ./bitcoind_proxy".to_string());
 
-    script.push("echo \"perf_paranoid=$(cat /proc/sys/kernel/perf_event_paranoid)\" > /tmp/msg".to_string());
-    script.push("./habort \"$(cat /tmp/msg)\"".to_string());
+    //script.push("echo \"perf_paranoid=$(cat /proc/sys/kernel/perf_event_paranoid)\" > /tmp/msg".to_string());
+    //script.push("./habort \"$(cat /tmp/msg)\"".to_string());
+
+    script.push("(./perf record -a -g -o /tmp/perf.data -- sleep 25 && ./perf report -i /tmp/perf.data --stdio | ./hcat && sleep 2 && ./habort \"perf done\") &".to_string());
 
     // Run the scenario
     script.push(format!(
