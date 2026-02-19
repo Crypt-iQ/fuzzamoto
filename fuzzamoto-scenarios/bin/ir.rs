@@ -572,7 +572,9 @@ where
             // with our snippet. How can we do this?
 
             // testcase.og_bytes[:action_pos] + new_payload
+            log::info!("to_vec()");
             let mut p = testcase.og_bytes[..action_pos].to_vec(); // could be snapshotted
+            log::info!("extend_from_slice");
             p.extend_from_slice(&new_payload);
 
             let new_testcase = match TestCase::decode(&p) {
