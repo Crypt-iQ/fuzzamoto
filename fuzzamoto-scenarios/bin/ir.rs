@@ -135,10 +135,10 @@ impl<'a> ScenarioInput<'a> for TestCase {
             log::info!("post program from-bytes");
             let mut compiler = Compiler::new();
             compiler.compile(&program).map_err(|e| e.to_string())?
-            log::info!("post compiler.compile");
         } else {
             postcard::from_bytes(bytes).map_err(|e| e.to_string())?
         };
+        log::info!("post compiler.compile");
         let og_bytes = bytes.to_vec();
         Ok(Self { program, og_bytes })
     }
