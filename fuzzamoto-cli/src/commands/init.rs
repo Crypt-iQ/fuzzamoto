@@ -94,6 +94,8 @@ impl InitCommand {
         all_deps.sort();
         all_deps.dedup();
 
+        file_ops::copy_file_to_dir(Path::new("/fuzzamoto/linux-6.1/tools/perf/perf"), sharedir)?;
+
         log::info!("Created share directory: {}", sharedir.display());
 
         nyx::compile_packer_binaries(nyx_dir)?;
