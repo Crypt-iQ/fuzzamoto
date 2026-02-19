@@ -111,7 +111,7 @@ pub fn create_nyx_script(
 
     // Run perf in the background and pipe to hcat?
     script.push("apt install -y linux-tools-generic".to_string());
-    script.push("(perf record -a -g -o perf.data -- sleep 30 && perf report -i perf.data --stdio | ./hcat) &".to_string());
+    script.push("(perf record -a -g -o perf.data -- sleep 30 && perf report -i perf.data --stdio | ./hcat && ./habort \"target term\") &".to_string());
 
     // Run the scenario
     script.push(format!(
