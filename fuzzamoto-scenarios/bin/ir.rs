@@ -130,9 +130,12 @@ fn probe_result_mapper(
 impl<'a> ScenarioInput<'a> for TestCase {
     fn decode(bytes: &'a [u8]) -> Result<Self, String> {
         let program = if cfg!(feature = "compile_in_vm") {
+            log::info!("pre program from-bytes");
             let program: Program = postcard::from_bytes(bytes).map_err(|e| e.to_string())?;
+            log::info!("post program from-bytes");
             let mut compiler = Compiler::new();
             compiler.compile(&program).map_err(|e| e.to_string())?
+            log::info!("post compiler.compile");
         } else {
             postcard::from_bytes(bytes).map_err(|e| e.to_string())?
         };

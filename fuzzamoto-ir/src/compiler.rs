@@ -326,6 +326,7 @@ impl Compiler {
         let mut has_inc = false;
 
         for instruction in &ir.instructions {
+            log::info!("instruction: {:?}", instruction.operation);
             let actions_before = self
                 .output
                 .actions
