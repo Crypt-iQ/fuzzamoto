@@ -109,9 +109,8 @@ pub fn create_nyx_script(
     script.push(format!("echo \"{proxy_script}\" >> ./bitcoind_proxy"));
     script.push("chmod +x ./bitcoind_proxy".to_string());
 
-    // Run perf in the background and pipe to hcat?
-    script.push("apt install -y linux-tools-generic".to_string());
-    script.push("(perf record -a -g -o perf.data -- sleep 30 && perf report -i perf.data --stdio | ./hcat && ./habort \"target term\") &".to_string());
+    script.push("echo \"perf_paranoid=$(cat /proc/sys/kernel/perf_event_paranoid)\" > /tmp/msg".to_string());
+    script.push("./habort \"$(cat /tmp/msg)\"".to_string());
 
     // Run the scenario
     script.push(format!(
