@@ -576,6 +576,7 @@ where
             let mut p = testcase.og_bytes[..action_pos].to_vec(); // could be snapshotted
             log::info!("extend_from_slice");
             p.extend_from_slice(&new_payload);
+            log::info!("post-extend from slice");
 
             let new_testcase = match TestCase::decode(&p) {
                 Ok(tc) => tc,
@@ -587,6 +588,8 @@ where
                     return ScenarioResult::Skip;
                 }
             };
+
+            log::info!("post TestCase::decode");
 
             // Resume just after the snapshot prefix.
             program = new_testcase.program;
