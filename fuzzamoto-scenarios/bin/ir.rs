@@ -78,6 +78,7 @@ pub fn nyx_print(bytes: &[u8]) {
 
 pub struct TestCase {
     program: CompiledProgram,
+    ir: Program,
 }
 
 fn probe_result_mapper(
@@ -128,17 +129,18 @@ fn probe_result_mapper(
 
 impl<'a> ScenarioInput<'a> for TestCase {
     fn decode(bytes: &'a [u8]) -> Result<Self, String> {
+
+        let ir: Program = postcard::from_bytes(bytes).map_err(|e| e.to_string())?;
+
         let program = if cfg!(feature = "compile_in_vm") {
-            log::info!("pre program from-bytes");
-            let program: Program = postcard::from_bytes(bytes).map_err(|e| e.to_string())?;
             log::info!("post program from-bytes");
             let mut compiler = Compiler::new();
-            compiler.compile(&program).map_err(|e| e.to_string())?
+            compiler.compile(&ir).map_err(|e| e.to_string())?
         } else {
             postcard::from_bytes(bytes).map_err(|e| e.to_string())?
         };
         log::info!("post compiler.compile");
-        Ok(Self { program })
+        Ok(Self { program, ir })
     }
 }
 
@@ -545,17 +547,6 @@ where
         let mut program = testcase.program;
         let mut start_index = 0;
 
-        // See if taking the existing testcase up to the frozen_prefix_len
-        // and then tacking on the extra bytes, compiling is faster
-        // 1. modify target_bytes to return post-snapshot data
-        //    - only when we already have taken a snapshot though...
-        //    - if we haven't taken a snapshot yet,
-        // 2. splice the payload here before calling decode which compile?
-
-        // TODO: Pass in new metadata, we're using the *old* metadata after compile!
-        // ... maybe? metadata is only used if recording_received_messages which means probing?
-        // unsure, maybe the metadata is propagated
-
         while let Some((new_payload, action_pos)) =
             self.process_actions(program, start_index, runner)
         {
@@ -564,17 +555,15 @@ where
             // is there any way to disable the coverage for that input? or simply resume execution, then
             // on the next reset, grab the payload.
 
-            // the "snippet" does not have the snapshot opcode
-            // we need to have <program>[:start_index] <snippet> passed into decode
-            // then only pass in "snippet" to process_actions
+            // testcase.ir has IncrementalSnapshot opcode, find position of it.
+            // then, snip after. This will *not* be action_pos, the mapping is not 1:1.
 
-            // assert there's no snapshot opcode in the "snippet"
-            //program is CompiledProgram which has <actions, metadata>, we want to combine this "program"
-            // with our snippet. How can we do this?
+            let pos = testcase.ir.instructions.iter()
+                .position(|instr| matches!(instr.operation, Operation::IncrementalSnapshot))
+                .unwrap();
 
-            // testcase.og_bytes[:action_pos] + new_payload
+            let mut p = testcase.ir.instructions[..pos.to_vec(); // Vec<Instruction>
 
-            let mut p : Vec<Instruction> = testcase.program.instructions[..action_pos].to_vec(); // Vec<Instruction>
             log::info!("postcard from bytes");
 
             let snippet = match postcard::from_bytes::<Program>(&new_payload) {
@@ -590,7 +579,7 @@ where
 
             log::info!("post-extend from slice");
 
-            let mut prog: Program = Program::unchecked_new(testcase.program.context.clone(), p)
+            let mut prog: Program = Program::unchecked_new(testcase.ir.context.clone(), p);
 
             log::info!("pre-compile");
             let mut compiler = Compiler::new();
@@ -618,6 +607,7 @@ where
 
             let new_testcase = TestCase {
                 program: cprog,
+                ir: prog, // doesn't matter
             };
 
             log::info!("post TestCase::decode");
