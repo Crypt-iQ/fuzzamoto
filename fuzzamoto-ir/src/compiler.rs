@@ -516,6 +516,8 @@ impl Compiler {
             if !matches!(instruction.operation, Operation::Probe) {
                 self.output.metadata.instructions += 1;
             }
+
+            log::info!("post-instruction");
         }
 
         Ok(self.output.clone()) // TODO: do not clone
