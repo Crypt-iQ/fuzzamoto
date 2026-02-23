@@ -483,6 +483,22 @@ where
 const NUM_RECENT_BLOCKS: u64 = 10;
 
 pub fn push_perf_data(id: usize) {
+    let _ = std::process::Command::new("sh")
+        .args(["-c", "kill -INT $(pidof perf) 2>/dev/null"])
+        .status();
+
+    // Wait until perf exits
+    loop {
+        let out = std::process::Command::new("sh")
+            .args(["-c", "pidof perf"])
+            .output()
+            .unwrap();
+        if out.stdout.is_empty() {
+            break;
+        }
+        std::thread::sleep(std::time::Duration::from_millis(10));
+    }
+
     let dst = format!("/tmp/perf_{:?}.data", id);
     let _ = std::fs::rename("/tmp/perf.data", &dst);
     let _ = std::process::Command::new("/tmp/hpush")
