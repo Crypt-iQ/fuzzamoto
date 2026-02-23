@@ -113,7 +113,11 @@ pub fn create_nyx_script(
     script.push("echo \"#!/bin/sh\" > ./bitcoind_proxy".to_string());
     script.push(format!("echo \"{proxy_script}\" >> ./bitcoind_proxy"));
     script.push("chmod +x ./bitcoind_proxy".to_string());
-    script.push("./perf record -a -g -F 10000 -o /tmp/perf.data &".to_string());
+
+    script.push("perf record -e sched:sched_switch -e sched:sched_wakeup -a -g -F 10000 -o /tmp/perf.data &".to_string());
+
+    // cycles
+    //script.push("./perf record -a -g -F 10000 -o /tmp/perf.data &".to_string());
 
     //script.push("echo \"perf_paranoid=$(cat /proc/sys/kernel/perf_event_paranoid)\" > /tmp/msg".to_string());
     //script.push("./habort \"$(cat /tmp/msg)\"".to_string());
