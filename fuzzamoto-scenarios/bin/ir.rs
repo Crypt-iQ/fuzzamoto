@@ -482,6 +482,14 @@ where
 
 const NUM_RECENT_BLOCKS: u64 = 10;
 
+pub fn push_perf_data(input_bytes: &[u8]) {
+    let dst = format!("/tmp/perf_{:x}.data", hash);
+    let _ = std::fs::rename("/tmp/perf.data", &dst);
+    let _ = std::process::Command::new("/tmp/hpush")
+        .arg(&dst)
+        .status();
+}
+
 pub fn probe_recent_block_hashes<T: HasBlockChainInterface>(
     target: &T,
     meta: &CompiledMetadata,
@@ -550,14 +558,6 @@ where
         while let Some((new_payload, action_pos)) =
             self.process_actions(program, start_index, runner)
         {
-            // If we are here, then we have taken the snapshot.
-            // skips rest of first input post-snapshot? not ideal. means coverage counters off?
-            // is there any way to disable the coverage for that input? or simply resume execution, then
-            // on the next reset, grab the payload.
-
-            // testcase.ir has IncrementalSnapshot opcode, find position of it.
-            // then, snip after. This will *not* be action_pos, the mapping is not 1:1.
-
             let pos = testcase.ir.instructions.iter()
                 .position(|instr| matches!(instr.operation, Operation::IncrementalSnapshot))
                 .unwrap();
@@ -627,6 +627,8 @@ where
 
         self.print_received();
         self.evaluate_oracles()
+
+        push_perf_data(testcase.program.actions.len());
     }
 }
 

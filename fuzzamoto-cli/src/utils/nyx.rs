@@ -56,10 +56,15 @@ pub fn create_nyx_script(
         "chmod +x hget".to_string(),
         "cp hget /tmp".to_string(),
         "cd /tmp".to_string(),
+        "echo 0 > /proc/sys/kernel/perf_event_paranoid".to_string(),
         "echo 0 > /proc/sys/kernel/randomize_va_space".to_string(),
         "echo 0 > /proc/sys/kernel/printk".to_string(),
         "./hget hcat_no_pt hcat".to_string(),
         "./hget habort_no_pt habort".to_string(),
+        "./hget hpush_no_pt hpush".to_string(),
+        "./hget perf perf".to_string(),
+        "chmod +x hpush".to_string(),
+        "chmod +x perf".to_string(),
     ];
 
     // Add dependencies
@@ -70,9 +75,6 @@ pub fn create_nyx_script(
     if let Some(rpc_path) = rpc_path {
         script.push(format!("./hget {rpc_path} {rpc_path}"));
     }
-
-    script.push("./hget perf perf".to_string());
-    script.push("chmod +x perf".to_string());
 
     // Make executables
     for exe in &["habort", "hcat", "ld-linux-x86-64.so.2", crash_handler_name] {
@@ -111,11 +113,11 @@ pub fn create_nyx_script(
     script.push("echo \"#!/bin/sh\" > ./bitcoind_proxy".to_string());
     script.push(format!("echo \"{proxy_script}\" >> ./bitcoind_proxy"));
     script.push("chmod +x ./bitcoind_proxy".to_string());
+    script.push("./perf record -a -g -o /tmp/perf.data &".to_string());
 
     //script.push("echo \"perf_paranoid=$(cat /proc/sys/kernel/perf_event_paranoid)\" > /tmp/msg".to_string());
     //script.push("./habort \"$(cat /tmp/msg)\"".to_string());
-
-    script.push("(./perf record -a -g -o /tmp/perf.data -- sleep 25 && ./perf report -i /tmp/perf.data --stdio | ./hcat && sleep 2 && ./habort \"perf done\") &".to_string());
+    //script.push("(./perf record -a -g -o /tmp/perf.data -- sleep 25 && ./perf report -i /tmp/perf.data --stdio | ./hcat && sleep 2 && ./habort \"perf done\") &".to_string());
 
     // Run the scenario
     script.push(format!(
