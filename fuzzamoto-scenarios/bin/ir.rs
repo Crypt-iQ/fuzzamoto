@@ -483,16 +483,6 @@ where
 const NUM_RECENT_BLOCKS: u64 = 10;
 
 pub fn push_perf_data(id: usize) {
-    let output = std::process::Command::new("ls")
-        .args(["-la", "/tmp/"])
-        .output()
-        .unwrap();
-
-    let msg = String::from_utf8_lossy(&output.stdout);
-    let _ = std::process::Command::new("/tmp/habort")
-        .arg(&*msg)
-        .status();
-
     let _ = std::process::Command::new("sh")
         .args(["-c", "kill -INT $(pidof perf) 2>/dev/null"])
         .status();
@@ -655,7 +645,7 @@ where
             self.probe_results.push(ret);
         }
 
-        push_perf_data(program_len);
+        //push_perf_data(program_len);
 
         self.print_received();
         self.evaluate_oracles()
