@@ -628,7 +628,7 @@ where
         push_perf_data(testcase.program.actions.len());
 
         self.print_received();
-        self.evaluate_oracles();
+        self.evaluate_oracles()
     }
 }
 
