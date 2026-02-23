@@ -488,11 +488,6 @@ pub fn push_perf_data(id: usize) {
     let push_result = std::process::Command::new("/tmp/hpush")
         .arg(&dst)
         .status();
-
-    let msg = format!("rename: {:?}, push: {:?}", rename_result, push_result);
-    let _ = std::process::Command::new("/tmp/habort")
-        .arg(&msg)
-        .status();
 }
 
 pub fn probe_recent_block_hashes<T: HasBlockChainInterface>(
