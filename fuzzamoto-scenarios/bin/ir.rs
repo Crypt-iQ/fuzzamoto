@@ -483,20 +483,15 @@ where
 const NUM_RECENT_BLOCKS: u64 = 10;
 
 pub fn push_perf_data(id: usize) {
-     let output = std::process::Command::new("ls")
-         .args(["-la", "/tmp/"])
-         .output()
-         .unwrap();
-
-     let msg = String::from_utf8_lossy(&output.stdout);
-     let _ = std::process::Command::new("/tmp/habort")
-         .arg(&*msg)
-         .status();
-
     let dst = format!("/tmp/perf_{:?}.data", id);
-    let _ = std::fs::rename("/tmp/perf.data", &dst);
-    let _ = std::process::Command::new("/tmp/hpush")
+    let rename_result = std::fs::rename("/tmp/perf.data", &dst);
+    let push_result = std::process::Command::new("/tmp/hpush")
         .arg(&dst)
+        .status();
+
+    let msg = format!("rename: {:?}, push: {:?}", rename_result, push_result);
+    let _ = std::process::Command::new("/tmp/habort")
+        .arg(&msg)
         .status();
 }
 
