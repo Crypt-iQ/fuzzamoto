@@ -482,8 +482,8 @@ where
 
 const NUM_RECENT_BLOCKS: u64 = 10;
 
-pub fn push_perf_data(input_bytes: &[u8]) {
-    let dst = format!("/tmp/perf_{:x}.data", hash);
+pub fn push_perf_data(id: usize) {
+    let dst = format!("/tmp/perf_{:?}.data", id);
     let _ = std::fs::rename("/tmp/perf.data", &dst);
     let _ = std::process::Command::new("/tmp/hpush")
         .arg(&dst)
@@ -625,10 +625,10 @@ where
             self.probe_results.push(ret);
         }
 
-        self.print_received();
-        self.evaluate_oracles()
-
         push_perf_data(testcase.program.actions.len());
+
+        self.print_received();
+        self.evaluate_oracles();
     }
 }
 
