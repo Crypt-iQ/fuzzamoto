@@ -555,6 +555,8 @@ where
         let mut program = testcase.program;
         let mut start_index = 0;
 
+        let mut program_len = program.actions.len();
+
         while let Some((new_payload, action_pos)) =
             self.process_actions(program, start_index, runner)
         {
@@ -615,6 +617,8 @@ where
             // Resume just after the snapshot prefix.
             program = new_testcase.program;
             start_index = action_pos;
+
+            program_len = program.actions.len();
         }
 
         self.ping_connections();
@@ -625,7 +629,7 @@ where
             self.probe_results.push(ret);
         }
 
-        push_perf_data(testcase.program.actions.len());
+        push_perf_data(program_len);
 
         self.print_received();
         self.evaluate_oracles()
