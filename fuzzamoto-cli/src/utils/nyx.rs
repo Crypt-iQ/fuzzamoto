@@ -117,8 +117,8 @@ pub fn create_nyx_script(
     // not supported
     //script.push("perf record -e sched:sched_switch -e sched:sched_wakeup -a -g -o /tmp/perf.data &".to_string());
 
-    // cycles
-    script.push("./perf record -a -g -e cycles --switch-events -o /tmp/perf.data &".to_string());
+    // cycles, uncomment to record from inside the VM
+    //script.push("./perf record -a -g -e cycles --switch-events -o /tmp/perf.data &".to_string());
 
     //script.push("echo \"perf_paranoid=$(cat /proc/sys/kernel/perf_event_paranoid)\" > /tmp/msg".to_string());
     //script.push("./habort \"$(cat /tmp/msg)\"".to_string());
