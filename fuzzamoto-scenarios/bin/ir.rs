@@ -645,7 +645,7 @@ where
             self.probe_results.push(ret);
         }
 
-        //push_perf_data(program_len);
+        push_perf_data(program_len);
 
         self.print_received();
         self.evaluate_oracles()
