@@ -202,7 +202,7 @@ where
             &self.options.crashes_dir(self.client_description.core_id()),
         );
         let timeout_verify_stage = IfStage::new(
-            |_, _, _, _| Ok(!self.options.ignore_hangs),
+            |_, _, _, _| Ok(false),
             tuple_list!(VerifyTimeoutsStage::new(
                 enable_capture_timeouts,
                 Duration::from_millis(u64::from(self.options.timeout)),
