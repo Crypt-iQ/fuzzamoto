@@ -330,9 +330,9 @@ where
         let (mutations, weights) = weighted_mutations![
             self.options,
             &mut swarm_rng,
-            (2000.0, IrMutator::new(InputMutator::new(), rng.clone())),
+            (200.0, IrMutator::new(InputMutator::new(), rng.clone())),
             (
-                1000.0,
+                100.0,
                 IrMutator::new(OperationMutator::new(LibAflByteMutator::new()), rng.clone())
             ),
             (
