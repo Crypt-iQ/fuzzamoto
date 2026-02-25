@@ -468,10 +468,12 @@ where
 
         let use_assertions = self.client_description.core_id().0 % 5 == 1;
 
+        let _policy = SnapshotPlacementPolicy::Balanced;
+
         let incremental_snapshot_stage = IncrementalSnapshotStage::new(
             self.options.incremental_snapshots,
             mutation_stage,
-            SnapshotPlacementPolicy::Balanced,
+            SnapshotPlacementPolicy::Aggressive,
             200,
             9999999,
             use_assertions,
