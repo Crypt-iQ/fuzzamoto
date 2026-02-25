@@ -15,6 +15,8 @@ use fuzzamoto_ir::Program;
 
 use crate::input::IrInput;
 
+use crate::feedbacks::assertions::AssertionMetadata;
+
 #[derive(Debug, Clone, Copy)]
 pub enum SnapshotPlacementPolicy {
     Balanced,
@@ -25,6 +27,8 @@ pub struct IncrementalSnapshotStage<IS, S, OT> {
     inner_stage: IS,
     policy: SnapshotPlacementPolicy,
     max_reuse_count: usize,
+    current_distance: u64,
+    assertions: bool,
     phantom: PhantomData<(S, OT)>,
 }
 
@@ -34,38 +38,30 @@ impl<IS, S, OT> IncrementalSnapshotStage<IS, S, OT> {
         inner_stage: IS,
         policy: SnapshotPlacementPolicy,
         max_reuse_count: usize,
+        current_distance: u64,
+        assertions: bool,
     ) -> Self {
         Self {
             enabled,
             inner_stage,
             policy,
             max_reuse_count,
+            current_distance,
+            assertions,
             phantom: PhantomData,
         }
     }
 
     /// Choose where to take the snapshot based on the placement policy
     fn choose_position(&self, rand: &mut impl Rand, program_len: usize) -> Option<usize> {
-        if program_len == 0 {
-            return None;
-        }
-
         match self.policy {
             SnapshotPlacementPolicy::Balanced => {
-                if program_len == 1 {
-                    Some(0)
-                } else if rand.coinflip(0.5_f64) {
-                    // First half
-                    let half = (program_len / 2).max(1);
-                    let nz_half = NonZeroUsize::new(half).expect("half should be non-zero");
-                    Some(rand.below(nz_half))
-                } else {
-                    // Second half
-                    let half = program_len / 2;
-                    let range = program_len - half;
-                    let nz_range = NonZeroUsize::new(range).expect("range should be non-zero");
-                    Some(half + rand.below(nz_range))
-                }
+                // Upper quartile
+                let half = program_len / 2;
+                let quartile = program_len / 4;
+                let range = quartile;
+                let nz_range = NonZeroUsize::new(range).expect("range should be non-zero");
+                Some(half + quartile + rand.below(nz_range))
             }
         }
     }
@@ -108,13 +104,36 @@ where
             input.ir().instructions.len()
         };
 
-        if program_len == 0 {
+        if program_len <= 3000 {
             // Skip creating an incremental snapshot if we're using the empty program
             return self.inner_stage.perform(fuzzer, executor, state, manager);
         }
 
         if state.rand_mut().coinflip(0.04) {
             // Use the root snapshot some of the time
+            return self.inner_stage.perform(fuzzer, executor, state, manager);
+        }
+
+        // Use the root snapshot if this input does not get closer to the 1000 mempool
+        // assertion.
+        let mut has_meta = false;
+        {
+            let testcase = state.current_testcase()?;
+            if let Ok(meta) = testcase.metadata::<AssertionMetadata>() {
+                for v in meta.assertions.values() {
+                    let distance = v.distance();
+                    if distance < self.current_distance + 2 {
+                        has_meta = true;
+                        log::info!("distance updated {distance} cur: {0}", self.current_distance);
+                    }
+                    if distance < self.current_distance {
+                        self.current_distance = distance;
+                    }
+                }
+            }
+        }
+
+        if !has_meta && self.assertions {
             return self.inner_stage.perform(fuzzer, executor, state, manager);
         }
 
