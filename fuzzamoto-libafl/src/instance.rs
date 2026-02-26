@@ -330,9 +330,9 @@ where
         let (mutations, weights) = weighted_mutations![
             self.options,
             &mut swarm_rng,
-            (2000.0, IrMutator::new(InputMutator::new(), rng.clone())),
+            (200.0, IrMutator::new(InputMutator::new(), rng.clone())),
             (
-                1000.0,
+                100.0,
                 IrMutator::new(OperationMutator::new(LibAflByteMutator::new()), rng.clone())
             ),
             (
@@ -466,11 +466,13 @@ where
 
         let mutation_stage = TuneableMutationalStage::new(&mut state, mutator);
 
+        let _policy = SnapshotPlacementPolicy::Balanced;
+
         let incremental_snapshot_stage = IncrementalSnapshotStage::new(
             self.options.incremental_snapshots,
             mutation_stage,
-            SnapshotPlacementPolicy::Balanced,
-            50,
+            SnapshotPlacementPolicy::Aggressive,
+            200,
         );
 
         let mut stages = tuple_list!(

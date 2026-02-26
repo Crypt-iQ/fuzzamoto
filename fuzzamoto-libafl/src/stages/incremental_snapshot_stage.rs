@@ -18,6 +18,7 @@ use crate::input::IrInput;
 #[derive(Debug, Clone, Copy)]
 pub enum SnapshotPlacementPolicy {
     Balanced,
+    Aggressive,
 }
 
 pub struct IncrementalSnapshotStage<IS, S, OT> {
@@ -46,26 +47,14 @@ impl<IS, S, OT> IncrementalSnapshotStage<IS, S, OT> {
 
     /// Choose where to take the snapshot based on the placement policy
     fn choose_position(&self, rand: &mut impl Rand, program_len: usize) -> Option<usize> {
-        if program_len == 0 {
-            return None;
-        }
-
         match self.policy {
-            SnapshotPlacementPolicy::Balanced => {
-                if program_len == 1 {
-                    Some(0)
-                } else if rand.coinflip(0.5_f64) {
-                    // First half
-                    let half = (program_len / 2).max(1);
-                    let nz_half = NonZeroUsize::new(half).expect("half should be non-zero");
-                    Some(rand.below(nz_half))
-                } else {
-                    // Second half
-                    let half = program_len / 2;
-                    let range = program_len - half;
-                    let nz_range = NonZeroUsize::new(range).expect("range should be non-zero");
-                    Some(half + rand.below(nz_range))
-                }
+            SnapshotPlacementPolicy::Balanced | SnapshotPlacementPolicy::Aggressive => {
+                // Upper quartile
+                let half = program_len / 2;
+                let quartile = program_len / 4;
+                let range = quartile;
+                let nz_range = NonZeroUsize::new(range).expect("range should be non-zero");
+                Some(half + quartile + rand.below(nz_range))
             }
         }
     }
@@ -108,7 +97,7 @@ where
             input.ir().instructions.len()
         };
 
-        if program_len == 0 {
+        if program_len <= 3000 {
             // Skip creating an incremental snapshot if we're using the empty program
             return self.inner_stage.perform(fuzzer, executor, state, manager);
         }
@@ -120,57 +109,72 @@ where
 
         let chosen_pos = self.choose_position(state.rand_mut(), program_len);
 
-        let new_prefix_len = {
-            let testcase = state.current_testcase()?;
-            let input = testcase.input().as_ref().unwrap();
-            chosen_pos.and_then(|pos| find_valid_snapshot_position(input.ir(), pos))
-        };
+        match self.policy {
+            SnapshotPlacementPolicy::Aggressive => {
+                // Description from paper:
+                // This policy cycles all available indices for snapshots.
+                // The first time an input is scheduled, it creates the
+                // snapshot at the end of the input. Each time no new inputs
+                // have been found by fuzzing this snapshot for 50 iterations,
+                // we place the snapshot one packet earlier. When Aggressive
+                // reaches the smallest index, it starts again from the end of
+                // the input.
 
-        if let Some(prefix_len) = new_prefix_len {
-            executor
-                .helper
-                .nyx_process
-                .option_set_delete_incremental_snapshot(false);
-            executor.helper.nyx_process.option_apply();
+                // Since we are not measuring coverage-per-input here yet:
+                // 1. Choose a starting index from the upper half
+                // 2. Starting from chosen_pos, cycle every index until the end of the program.
+                for index in chosen_pos.unwrap()..=program_len {
+                    let new_prefix_len = {
+                        let testcase = state.current_testcase()?;
+                        let input = testcase.input().as_ref().unwrap();
+                        find_valid_snapshot_position(input.ir(), index)
+                    };
 
-            // Set frozen_prefix_len on the input so inner_stage is aware of it
-            {
-                let mut testcase = state.current_testcase_mut()?;
-                let input = testcase.input_mut().as_mut().unwrap();
-                input.frozen_prefix_len = Some(prefix_len);
-            }
+                    if let Some(prefix_len) = new_prefix_len {
+                        executor
+                            .helper
+                            .nyx_process
+                            .option_set_delete_incremental_snapshot(false);
+                        executor.helper.nyx_process.option_apply();
 
-            log::info!("Created incremental snapshot at position {prefix_len}");
+                        // Set frozen_prefix_len on the input so inner_stage is aware of it
+                        {
+                            let mut testcase = state.current_testcase_mut()?;
+                            let input = testcase.input_mut().as_mut().unwrap();
+                            input.frozen_prefix_len = Some(prefix_len);
+                        }
 
-            for reuse_count in 1..=self.max_reuse_count {
-                if reuse_count == self.max_reuse_count {
-                    // Discard the incremental snapshot at the end of the last iteration.
-                    executor
-                        .helper
-                        .nyx_process
-                        .option_set_delete_incremental_snapshot(true);
-                    executor.helper.nyx_process.option_apply();
+                        log::info!("Created incremental snapshot at position {prefix_len}");
 
-                    // Force a deletion by bypassing the inner_stage which may return early.
-                    let testcase = state.current_testcase()?;
-                    let input = testcase.input().as_ref().unwrap().clone();
-                    drop(testcase);
-                    executor.run_target(fuzzer, state, manager, &input)?;
-                } else {
-                    self.inner_stage.perform(fuzzer, executor, state, manager)?;
+                        for reuse_count in 1..=self.max_reuse_count {
+                            if reuse_count == self.max_reuse_count {
+                                // Discard the incremental snapshot at the end of the last iteration.
+                                executor
+                                    .helper
+                                    .nyx_process
+                                    .option_set_delete_incremental_snapshot(true);
+                                executor.helper.nyx_process.option_apply();
+
+                                // Force a deletion by bypassing the inner_stage which may return early.
+                                let testcase = state.current_testcase()?;
+                                let input = testcase.input().as_ref().unwrap().clone();
+                                drop(testcase);
+                                executor.run_target(fuzzer, state, manager, &input)?;
+                            } else {
+                                self.inner_stage.perform(fuzzer, executor, state, manager)?;
+                            }
+                        }
+
+                        // Reset frozen_prefix_len
+                        {
+                            let mut testcase = state.current_testcase_mut()?;
+                            let input = testcase.input_mut().as_mut().unwrap();
+                            input.frozen_prefix_len = None;
+                        }
+                    }
                 }
-            }
-
-            // Reset frozen_prefix_len
-            {
-                let mut testcase = state.current_testcase_mut()?;
-                let input = testcase.input_mut().as_mut().unwrap();
-                input.frozen_prefix_len = None;
-            }
-        } else {
-            log::info!("No valid position to create incremental snapshot",);
-
-            return Ok(());
+            },
+            SnapshotPlacementPolicy::Balanced => todo!(),
         }
 
         Ok(())
