@@ -202,7 +202,7 @@ impl<F> AssertionDistanceScheduler<F> {
             return None;
         }
 
-        let idx = state.rand_mut().below(eligible.len() as u64) as usize;
+        let idx = state.rand_mut().below(NonZero::new(eligible.len()).unwrap()) as usize;
         Some(eligible[idx])
     }
 }
