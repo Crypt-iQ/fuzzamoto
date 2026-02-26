@@ -50,7 +50,7 @@ use crate::{
     input::IrInput,
     mutators::{IrGenerator, IrMutator, IrSpliceMutator, LibAflByteMutator},
     options::FuzzerOptions,
-    schedulers::SupportedSchedulers,
+    schedulers::{AssertionBiasedScheduler, SupportedSchedulers},
     stages::{
         IncrementalSnapshotStage, IrMinimizerStage, ProbingStage, SnapshotPlacementPolicy,
         StabilityCheckStage, VerifyTimeoutsStage,
@@ -168,6 +168,9 @@ where
         let map_observer_handle = trace_observer.handle();
         let stdout_observer_handle = stdout_observer.handle();
 
+        // Shared channel for assertion feedback → scheduler communication
+        let assertion_channel = crate::schedulers::new_assertion_channel();
+
         // Feedback to rate the interestingness of an input
         let mut feedback = feedback_or!(
             // New maximization map feedback
@@ -189,7 +192,8 @@ where
                     &stdout_observer,
                     self.options
                         .output_dir(self.client_description.core_id())
-                        .join("assertions.txt")
+                        .join("assertions.txt"),
+                    assertion_channel.clone(),
                 ),
             ),
             // Time feedback
@@ -268,6 +272,8 @@ where
                 PhantomData,
             )
         };
+        // Bias scheduling toward corpus entries near the assertion distance frontier
+        let scheduler = AssertionBiasedScheduler::new(scheduler, 0.5, 50, assertion_channel);
 
         let observers = tuple_list!(trace_observer, time_observer, stdout_observer);
 
@@ -451,7 +457,7 @@ where
             .unwrap();
 
         tuneable_mutator
-            .set_iter_probabilities_pow(&mut state, vec![0.025f32, 0.1, 0.4, 0.3, 0.1, 0.05, 0.025])
+            .set_iter_probabilities_pow(&mut state, vec![0.01f32, 0.05, 0.15, 0.30, 0.25, 0.15, 0.09])
             .unwrap();
 
         let mutator = tuneable_mutator;

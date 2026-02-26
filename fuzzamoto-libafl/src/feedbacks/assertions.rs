@@ -6,8 +6,9 @@ use std::path::PathBuf;
 use std::time::{Duration, Instant};
 
 use libafl::HasMetadata;
-use libafl::corpus::Testcase;
+use libafl::corpus::{Corpus, Testcase};
 use libafl::observers::StdOutObserver;
+use libafl::state::HasCorpus;
 use libafl_bolts::tuples::{Handle, Handled, MatchName, MatchNameRef};
 use libafl_bolts::{Error, Named, impl_serdeany};
 
@@ -56,6 +57,11 @@ pub struct AssertionFeedback {
     #[serde(skip)]
     output_file: Option<PathBuf>,
 
+    /// Shared channel to notify the scheduler about new assertion entries.
+    /// None for objective-only feedback instances (new_only_always).
+    #[serde(skip)]
+    scheduler_channel: Option<crate::schedulers::AssertionChannel>,
+
     // Only consider always assertions
     only_always_assertions: bool,
 }
@@ -90,6 +96,7 @@ impl<S> StateInitializer<S> for AssertionFeedback {}
 impl<EM, I, OT, S> Feedback<EM, I, OT, S> for AssertionFeedback
 where
     OT: MatchName,
+    S: HasCorpus<I>,
 {
     fn is_interesting(
         &mut self,
@@ -141,7 +148,7 @@ where
 
     fn append_metadata(
         &mut self,
-        _state: &mut S,
+        state: &mut S,
         _manager: &mut EM,
         _observers: &OT,
         testcase: &mut Testcase<I>,
@@ -150,6 +157,20 @@ where
         for msg in &self.last_assertion_updates {
             if let Some(assertion) = self.assertions.get(msg) {
                 assertions.insert(msg.clone(), assertion.clone());
+            }
+        }
+
+        // Notify the scheduler channel about this entry's assertion distance
+        if let Some(channel) = &self.scheduler_channel {
+            if !assertions.is_empty() {
+                if let Some(id) = *state.corpus().current() {
+                    let min_dist = assertions
+                        .values()
+                        .map(|a| a.distance())
+                        .min()
+                        .unwrap_or(u64::MAX);
+                    channel.borrow_mut().push((id, min_dist));
+                }
             }
         }
 
@@ -176,7 +197,7 @@ impl Named for AssertionFeedback {
 impl AssertionFeedback {
     /// Creates a new [`AssertionFeedback`].
     #[must_use]
-    pub fn new(observer: &StdOutObserver, output_file: PathBuf) -> Self {
+    pub fn new(observer: &StdOutObserver, output_file: PathBuf, channel: crate::schedulers::AssertionChannel) -> Self {
         let interval = Duration::from_secs(30);
         Self {
             o_ref: observer.handle(),
@@ -187,6 +208,7 @@ impl AssertionFeedback {
             last_update: Some(Instant::now().checked_sub(interval * 2).unwrap()),
             update_interval: Some(interval),
 
+            scheduler_channel: Some(channel),
             only_always_assertions: false,
         }
     }
@@ -198,6 +220,7 @@ impl AssertionFeedback {
             output_file: None,
             last_update: None,
             update_interval: None,
+            scheduler_channel: None,
             only_always_assertions: true,
         }
     }
