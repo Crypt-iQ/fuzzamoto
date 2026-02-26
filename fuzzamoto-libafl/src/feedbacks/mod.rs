@@ -1,4 +1,5 @@
 pub mod assertions;
+pub use assertions::AssertionMetadata;
 
 use regex::bytes::Regex;
 use std::{borrow::Cow, cell::RefCell, fmt::Debug, rc::Rc};

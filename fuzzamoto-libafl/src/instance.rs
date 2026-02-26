@@ -50,7 +50,7 @@ use crate::{
     input::IrInput,
     mutators::{IrGenerator, IrMutator, IrSpliceMutator, LibAflByteMutator},
     options::FuzzerOptions,
-    schedulers::SupportedSchedulers,
+    schedulers::{AssertionDistanceScheduler, SupportedSchedulers},
     stages::{IrMinimizerStage, ProbingStage, StabilityCheckStage, VerifyTimeoutsStage},
 };
 
@@ -249,19 +249,21 @@ where
         };
 
         let scheduler = if self.options.minimize_input.is_some() {
-            // Avoid scheduler metatdata dependency
+            // Avoid scheduler metadata dependency
             SupportedSchedulers::Queue(QueueScheduler::new(), PhantomData)
         } else {
-            // A minimization+queue policy to get testcasess from the corpus
-            SupportedSchedulers::LenTimeMinimizer(
-                IndexesLenTimeMinimizerScheduler::new(
+            // A minimization+queue policy to get testcases from the corpus
+            // Wrapped with AssertionDistanceScheduler for 50% assertion-based prioritization
+            let inner_scheduler = IndexesLenTimeMinimizerScheduler::new(
+                &trace_observer,
+                StdWeightedScheduler::with_schedule(
+                    &mut state,
                     &trace_observer,
-                    StdWeightedScheduler::with_schedule(
-                        &mut state,
-                        &trace_observer,
-                        Some(PowerSchedule::explore()),
-                    ),
+                    Some(PowerSchedule::explore()),
                 ),
+            );
+            SupportedSchedulers::LenTimeMinimizer(
+                AssertionDistanceScheduler::new(inner_scheduler),
                 PhantomData,
             )
         };
