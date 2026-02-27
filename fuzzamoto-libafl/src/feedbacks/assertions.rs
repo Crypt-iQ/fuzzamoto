@@ -48,6 +48,7 @@ pub struct AssertionFeedback {
     o_ref: Handle<StdOutObserver>,
 
     last_assertion_updates: Vec<String>,
+    last_parsed: HashMap<String, AssertionScope>,
 
     #[serde(skip)]
     last_update: Option<Instant>,
@@ -110,6 +111,7 @@ where
             .ok_or(Error::illegal_state("StdOutObserver has no stdout"))?;
 
         let parsed = parse_assertions_from_stdout(buffer);
+        self.last_parsed = parsed.clone();
         let mut interesting = false;
         for (_, assertion) in parsed {
             interesting |= self.evaluate_assertion(assertion);
@@ -146,14 +148,9 @@ where
         _observers: &OT,
         testcase: &mut Testcase<I>,
     ) -> Result<(), Error> {
-        let mut assertions = HashMap::new();
-        for msg in &self.last_assertion_updates {
-            if let Some(assertion) = self.assertions.get(msg) {
-                assertions.insert(msg.clone(), assertion.clone());
-            }
-        }
-
-        testcase.add_metadata(AssertionMetadata { assertions });
+        testcase.add_metadata(AssertionMetadata {
+            assertions: self.last_parsed.clone(),
+        });
 
         Ok(())
     }
@@ -182,6 +179,7 @@ impl AssertionFeedback {
             o_ref: observer.handle(),
             assertions: HashMap::new(),
             last_assertion_updates: Vec::new(),
+            last_parsed: HashMap::new(),
             output_file: Some(output_file),
 
             last_update: Some(Instant::now().checked_sub(interval * 2).unwrap()),
@@ -195,6 +193,7 @@ impl AssertionFeedback {
             o_ref: observer.handle(),
             assertions: HashMap::new(),
             last_assertion_updates: Vec::new(),
+            last_parsed: HashMap::new(),
             output_file: None,
             last_update: None,
             update_interval: None,
