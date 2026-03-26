@@ -507,6 +507,7 @@ impl ProgramBuilder {
             });
 
         let num_utxos = all_utxos.clone().count();
+        log::info!("get_random_utxos, num_utxos: {:?}", num_utxos);
         if num_utxos == 0 {
             return Vec::new();
         }

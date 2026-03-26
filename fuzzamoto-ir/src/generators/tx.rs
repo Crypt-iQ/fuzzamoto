@@ -210,6 +210,7 @@ impl<R: RngCore> Generator<R> for SingleTxGenerator {
     ) -> GeneratorResult {
         let funding_txos = builder.get_random_utxos(rng);
         if funding_txos.is_empty() {
+            log::info!("SingleTxGenerator MissingVariables");
             return Err(GeneratorError::MissingVariables);
         }
 
@@ -269,6 +270,7 @@ impl<R: RngCore> Generator<R> for OneParentOneChildGenerator {
     ) -> GeneratorResult {
         let funding_txos = builder.get_random_utxos(rng);
         if funding_txos.is_empty() {
+            log::info!("1P1CGenerator MissingVariables");
             return Err(GeneratorError::MissingVariables);
         }
 
@@ -337,6 +339,7 @@ impl<R: RngCore> Generator<R> for LongChainGenerator {
     ) -> GeneratorResult {
         let mut funding_txos = builder.get_random_utxos(rng);
         if funding_txos.is_empty() {
+            log::info!("LongChainGenerator MissingVariables");
             return Err(GeneratorError::MissingVariables);
         }
 
@@ -402,6 +405,7 @@ impl<R: RngCore> Generator<R> for LargeTxGenerator {
     ) -> GeneratorResult {
         let funding_txos = builder.get_random_utxos(rng);
         if funding_txos.is_empty() {
+            log::info!("LargeTxGenerator MissingVariables");
             return Err(GeneratorError::MissingVariables);
         }
 
