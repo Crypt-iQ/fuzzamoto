@@ -32,7 +32,7 @@ fn get_random_output_type<R: RngCore>(rng: &mut R) -> OutputType {
         3 => OutputType::PayToPubKey,
         4 => OutputType::PayToPubKeyHash,
         5 => OutputType::PayToWitnessPubKeyHash,
-        6 => OutputType::PayToTaproot,
+        //6 => OutputType::PayToTaproot,
         _ => OutputType::OpReturn,
     }
 }

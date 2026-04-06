@@ -321,6 +321,7 @@ impl Compiler {
 
         self.connection_counter = ir.context.num_connections;
 
+        // TODO: Accurately count txos to avoid negative?
         let mut txo_count = 0;
 
         // For now, only log the number of txos.
