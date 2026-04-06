@@ -324,6 +324,8 @@ impl Compiler {
         // TODO: Accurately count txos to avoid negative?
         let mut txo_count = 0;
 
+        let mut sent_txs = 0;
+
         // For now, only log the number of txos.
         for instruction in &ir.instructions {
             match instruction.operation {
@@ -333,11 +335,14 @@ impl Compiler {
                 Operation::AddTxInput => {
                     txo_count -= 1;
                 }
+                Operation::SendTxNoWit | Operation::SendTx => {
+                    sent_txs += 1;
+                }
                 _ => {}
             }
         }
 
-        log::info!("Available txos {}", txo_count);
+        log::info!("Available txos {}, total sent_txs {}", txo_count, sent_txs);
 
         for instruction in &ir.instructions {
             let actions_before = self
