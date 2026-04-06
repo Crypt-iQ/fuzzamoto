@@ -13,6 +13,7 @@ use rand::{Rng, RngCore, seq::SliceRandom};
 
 use super::{GeneratorError, GeneratorResult};
 
+#[allow(dead_code)]
 enum OutputType {
     PayToWitnessScriptHash,
     PayToScriptHash,
