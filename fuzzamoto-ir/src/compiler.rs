@@ -25,7 +25,7 @@ use bitcoin::{
     taproot::{LeafVersion, NodeInfo, TapLeafHash, TapNodeHash},
     transaction,
 };
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 use std::{any::Any, convert::TryInto, time::Duration};
 
 use std::net::{Ipv4Addr, Ipv6Addr, SocketAddr, SocketAddrV4, SocketAddrV6};
