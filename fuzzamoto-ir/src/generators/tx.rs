@@ -1,6 +1,6 @@
 use crate::{
     IndexedVariable, Operation, PerTestcaseMetadata, TaprootLeafSpec,
-    generators::{Generator, ProgramBuilder},
+    generators::{Generator, ProgramBuilder}, InstructionContext,
 };
 use bitcoin::{
     opcodes::{
@@ -258,7 +258,7 @@ impl<R: RngCore> Generator<R> for SingleTxGenerator {
         rng: &mut R,
         _meta: Option<&PerTestcaseMetadata>,
     ) -> Option<usize> {
-        program.get_random_instruction_from(rng, &InstructionContext::Global, program.instructions.len() - 5)
+        program.get_random_instruction_index_from(rng, &InstructionContext::Global, program.instructions.len() - 5)
     }
 
     fn name(&self) -> &'static str {
@@ -330,6 +330,16 @@ impl<R: RngCore> Generator<R> for OneParentOneChildGenerator {
         Ok(())
     }
 
+    fn choose_index(
+        &self,
+        program: &crate::Program,
+        rng: &mut R,
+        _meta: Option<&PerTestcaseMetadata>,
+    ) -> Option<usize> {
+        program.get_random_instruction_index_from(rng, &InstructionContext::Global, program.instructions.len() - 5)
+    }
+
+
     fn name(&self) -> &'static str {
         "1P1CGenerator"
     }
@@ -394,6 +404,15 @@ impl<R: RngCore> Generator<R> for LongChainGenerator {
         }
 
         Ok(())
+    }
+
+    fn choose_index(
+        &self,
+        program: &crate::Program,
+        rng: &mut R,
+        _meta: Option<&PerTestcaseMetadata>,
+    ) -> Option<usize> {
+        program.get_random_instruction_index_from(rng, &InstructionContext::Global, program.instructions.len() - 5)
     }
 
     fn name(&self) -> &'static str {
