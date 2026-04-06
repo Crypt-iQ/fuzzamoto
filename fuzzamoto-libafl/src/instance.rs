@@ -358,15 +358,15 @@ where
                 40.0,
                 IrGenerator::new(SendMessageGenerator::default(), rng.clone())
             ),
-            (50.0, IrGenerator::new(SingleTxGenerator, rng.clone())),
-            (50.0, IrGenerator::new(LongChainGenerator, rng.clone())),
-            (50.0, IrGenerator::new(LargeTxGenerator, rng.clone())),
+            (2000.0, IrGenerator::new(SingleTxGenerator, rng.clone())),
+            (2000.0, IrGenerator::new(LongChainGenerator, rng.clone())),
+            (2000.0, IrGenerator::new(LargeTxGenerator, rng.clone())),
             (
-                50.0,
+                2000.0,
                 IrGenerator::new(OneParentOneChildGenerator, rng.clone())
             ),
             (
-                20.0,
+                200.0,
                 IrGenerator::new(
                     TxoGenerator::new(full_program_context.txos.clone()),
                     rng.clone()
