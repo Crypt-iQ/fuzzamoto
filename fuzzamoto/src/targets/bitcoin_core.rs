@@ -63,6 +63,7 @@ impl BitcoinCoreTarget {
             "-checkmempool=0",
             "-debug=validation",
             "-debug=mempool",
+            "-debug=mempoolrej",
             "-txreconciliation",
             "-peerbloomfilters",
             "-peerblockfilters",
