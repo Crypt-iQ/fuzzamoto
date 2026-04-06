@@ -360,7 +360,7 @@ where
             ),
             (2000.0, IrGenerator::new(SingleTxGenerator, rng.clone())),
             (2000.0, IrGenerator::new(LongChainGenerator, rng.clone())),
-            (2000.0, IrGenerator::new(LargeTxGenerator, rng.clone())),
+            (0.0, IrGenerator::new(LargeTxGenerator, rng.clone())),
             (
                 2000.0,
                 IrGenerator::new(OneParentOneChildGenerator, rng.clone())
@@ -386,8 +386,8 @@ where
                     rng.clone()
                 )
             ),
-            (50.0, IrGenerator::new(SendBlockGenerator, rng.clone())),
-            (50.0, IrGenerator::new(AddTxToBlockGenerator, rng.clone())),
+            (200.0, IrGenerator::new(SendBlockGenerator, rng.clone())),
+            (500.0, IrGenerator::new(AddTxToBlockGenerator, rng.clone())),
             (
                 10.0,
                 IrGenerator::new(CompactFilterQueryGenerator, rng.clone())

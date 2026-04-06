@@ -26,15 +26,15 @@ enum OutputType {
 }
 
 fn get_random_output_type<R: RngCore>(rng: &mut R) -> OutputType {
-    match rng.gen_range(0..8) {
+    match rng.gen_range(0..6) {
         0 => OutputType::PayToWitnessScriptHash,
         1 => OutputType::PayToAnchor,
         2 => OutputType::PayToScriptHash,
         3 => OutputType::PayToPubKey,
         4 => OutputType::PayToPubKeyHash,
-        5 => OutputType::PayToWitnessPubKeyHash,
+        _ => OutputType::PayToWitnessPubKeyHash,
         //6 => OutputType::PayToTaproot,
-        _ => OutputType::OpReturn,
+        //_ => OutputType::OpReturn,
     }
 }
 
@@ -250,6 +250,15 @@ impl<R: RngCore> Generator<R> for SingleTxGenerator {
             builder.force_append(vec![conn_var.index, const_tx_var.index], &Operation::SendTx);
         }
         Ok(())
+    }
+
+    fn choose_index(
+        &self,
+        program: &crate::Program,
+        rng: &mut R,
+        _meta: Option<&PerTestcaseMetadata>,
+    ) -> Option<usize> {
+        program.get_random_instruction_from(rng, &InstructionContext::Global, program.instructions.len() - 5)
     }
 
     fn name(&self) -> &'static str {
