@@ -25,7 +25,7 @@ use bitcoin::{
     taproot::{LeafVersion, NodeInfo, TapLeafHash, TapNodeHash},
     transaction,
 };
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::{any::Any, convert::TryInto, time::Duration};
 
 use std::net::{Ipv4Addr, Ipv6Addr, SocketAddr, SocketAddrV4, SocketAddrV6};
@@ -320,6 +320,23 @@ impl Compiler {
         }
 
         self.connection_counter = ir.context.num_connections;
+
+        let mut txo_count = 0;
+
+        // For now, only log the number of txos.
+        for instruction in &ir.instructions {
+            match instruction.operation {
+                Operation::TakeTxo | Operation::LoadTxo { .. } => {
+                    txo_count += 1;
+                }
+                Operation::AddTxInput => {
+                    txo_count -= 1;
+                }
+                _ => {}
+            }
+        }
+
+        log::info!("Available txos {}", txo_count);
 
         for instruction in &ir.instructions {
             let actions_before = self
@@ -1413,6 +1430,9 @@ impl Compiler {
                         input.witness.clear();
                     }
                 }
+
+                // Log transactions we send.
+                log::info!("SendTx: txid = {:?}", tx_var.id);
 
                 self.emit_send_message(*connection_var, "tx", &tx_var.tx);
             }
