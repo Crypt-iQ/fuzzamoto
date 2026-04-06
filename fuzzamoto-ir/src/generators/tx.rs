@@ -218,7 +218,7 @@ impl<R: RngCore> Generator<R> for SingleTxGenerator {
         let tx_version = *[1, 2, 3].choose(rng).unwrap();
         let output_amounts = {
             let mut amounts = vec![];
-            let num_outputs = rng.gen_range(1..(funding_txos.len() + 5));
+            let num_outputs = rng.gen_range(10..(funding_txos.len() + 11));
             for _i in 0..num_outputs {
                 amounts.push((
                     rng.gen_range(5000..100_000_000),

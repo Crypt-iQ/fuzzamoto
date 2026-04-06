@@ -512,7 +512,13 @@ impl ProgramBuilder {
             return Vec::new();
         }
 
-        let n = rng.gen_range(0..num_utxos);
+        // Limit to at max 5
+        let mut num_to_choose = 5;
+        if num_utxos < num_to_choose {
+            num_to_choose = num_utxos;
+        }
+
+        let n = rng.gen_range(0..num_to_choose);
         all_utxos.choose_multiple(rng, n + 1)
     }
 }
