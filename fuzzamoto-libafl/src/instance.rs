@@ -174,7 +174,7 @@ where
                 // Disable coverage feedback if we're minimizing an input
                 ConstFeedback::new(self.options.minimize_input.is_none()),
                 // Every 5th instance (skipping 0) has coverage feedback disabled
-                ConstFeedback::new(self.client_description.core_id().0 % 5 != 1),
+                //ConstFeedback::new(self.client_description.core_id().0 % 5 != 1),
                 map_feedback,
             ),
             feedback_and_fast!(
