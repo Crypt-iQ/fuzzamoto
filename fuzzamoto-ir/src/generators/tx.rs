@@ -410,35 +410,36 @@ impl<R: RngCore> Generator<R> for LargeTxGenerator {
 
         let conn_var = builder.get_or_create_random_connection(rng);
 
-        for utxo in funding_txos {
-            let (tx_var, _) = build_tx(
-                builder,
-                rng,
-                std::slice::from_ref(&utxo),
-                2,
-                &[(10_000, OutputType::OpReturn)],
-            );
+        let output_amounts = {
+            let mut amounts = vec![];
+            let num_outputs = rng.gen_range(500..(funding_txos.len() + 500));
+            for _i in 0..num_outputs {
+                amounts.push((
+                    rng.gen_range(5000..100_000_000),
+                    get_random_output_type(rng),
+                ));
+            }
+            amounts
+        };
 
-            let mut send_tx = |tx_var: IndexedVariable| {
-                let mut_inventory_var =
-                    builder.force_append_expect_output(vec![], &Operation::BeginBuildInventory);
-                builder.force_append(
-                    vec![mut_inventory_var.index, tx_var.index],
-                    &Operation::AddWtxidInv,
-                );
-                let const_inventory_var = builder.force_append_expect_output(
-                    vec![mut_inventory_var.index],
-                    &Operation::EndBuildInventory,
-                );
+        let (tx_var, _) = build_tx(builder, rng, &funding_txos, 2, &output_amounts);
 
-                builder.force_append(
-                    vec![conn_var.index, const_inventory_var.index],
-                    &Operation::SendInv,
-                );
-                builder.force_append(vec![conn_var.index, tx_var.index], &Operation::SendTx);
-            };
-            send_tx(tx_var);
-        }
+        let mut_inventory_var =
+            builder.force_append_expect_output(vec![], &Operation::BeginBuildInventory);
+        builder.force_append(
+            vec![mut_inventory_var.index, tx_var.index],
+            &Operation::AddWtxidInv,
+        );
+        let const_inventory_var = builder.force_append_expect_output(
+            vec![mut_inventory_var.index],
+            &Operation::EndBuildInventory,
+        );
+
+        builder.force_append(
+            vec![conn_var.index, const_inventory_var.index],
+            &Operation::SendInv,
+        );
+        builder.force_append(vec![conn_var.index, tx_var.index], &Operation::SendTx);
 
         Ok(())
     }
