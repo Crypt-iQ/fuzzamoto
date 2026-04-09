@@ -2132,6 +2132,8 @@ impl Compiler {
             }
         }
 
+        log::info!("tx weight: {}", tx_var.tx.vsize());
+
         let txid = tx_var.tx.compute_txid();
         let id_bytes = *txid.as_raw_hash().as_byte_array();
 
