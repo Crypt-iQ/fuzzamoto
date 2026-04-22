@@ -398,7 +398,9 @@ impl<T: Transport> Connection<T> {
 
         if self.connection_type == ConnectionType::Outbound {
             loop {
+                log::info!("ConnectionType::Outbound receive call");
                 let received = self.transport.receive()?;
+                log::info!("ConnectionType::Outbound received: {:?}", received.0);
                 if received.0 == "version" {
                     break;
                 }
@@ -434,7 +436,9 @@ impl<T: Transport> Connection<T> {
 
         // Wait for verack
         loop {
+            log::info!("Waiting for verack");
             let received = self.transport.receive()?;
+            log::info!("Received message while waiting for verack: {?:}", received.0);
             if received.0 == "verack" {
                 break;
             }

@@ -138,8 +138,10 @@ impl<TX: Transport, T: Target<TX>> GenericScenario<TX, T> {
         ];
 
         let mut send_compact = false;
+        let mut index = 0;
         #[expect(clippy::cast_possible_wrap)]
         for (connection, relay, wtxidrelay, addrv2, erlay) in &mut connections {
+            log::info!("connection: {?:}, index: {?:}", connection, index);
             connection.version_handshake(HandshakeOpts {
                 time: time as i64,
                 relay: *relay,
@@ -154,6 +156,7 @@ impl<TX: Transport, T: Target<TX>> GenericScenario<TX, T> {
             });
             connection.send(&("sendcmpct".to_string(), encode::serialize(&sendcmpct)))?;
             send_compact = !send_compact;
+            index += 1;
         }
 
         let mut prev_hash = genesis_block.block_hash();
