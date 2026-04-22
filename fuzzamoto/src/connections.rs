@@ -405,6 +405,8 @@ impl<T: Transport> Connection<T> {
                     break;
                 }
             }
+        } else {
+            log::info!("Inbound conn");
         }
 
         // Convert version message to (String, Vec<u8>) format

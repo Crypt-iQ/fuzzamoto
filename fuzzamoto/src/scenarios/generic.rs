@@ -141,7 +141,7 @@ impl<TX: Transport, T: Target<TX>> GenericScenario<TX, T> {
         let mut index = 0;
         #[expect(clippy::cast_possible_wrap)]
         for (connection, relay, wtxidrelay, addrv2, erlay) in &mut connections {
-            log::info!("connection: {:?}, index: {:?}", connection, index);
+            log::info!("index: {:?}", index);
             connection.version_handshake(HandshakeOpts {
                 time: time as i64,
                 relay: *relay,
