@@ -438,7 +438,7 @@ impl<T: Transport> Connection<T> {
         loop {
             log::info!("Waiting for verack");
             let received = self.transport.receive()?;
-            log::info!("Received message while waiting for verack: {?:}", received.0);
+            log::info!("Received message while waiting for verack: {:?}", received.0);
             if received.0 == "verack" {
                 break;
             }
