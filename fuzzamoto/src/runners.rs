@@ -1,6 +1,9 @@
 #[cfg(feature = "nyx")]
 use fuzzamoto_nyx_sys::*;
 
+#[cfg(feature = "nyx_lite")]
+use fuzzamoto_nyx_lite::*;
+
 /// `Runner` provides an abstraction for a fuzzamoto test case runner (e.g. run under nyx,
 /// libafl-qemu, local system, etc.)
 pub trait Runner {
@@ -46,22 +49,22 @@ impl Runner for LocalRunner {
     }
 }
 
-#[cfg(feature = "nyx")]
+#[cfg(feature = "nyx_lite")]
 pub struct NyxRunner {
     max_input_size: usize,
 }
-#[cfg(feature = "nyx")]
+#[cfg(feature = "nyx_lite")]
 impl Runner for NyxRunner {
     fn new() -> Self {
         unsafe {
-            let max_input_size = nyx_init();
+            let max_input_size = nyx_lite_init();
             Self { max_input_size }
         }
     }
 
     fn get_fuzz_input(&self) -> Vec<u8> {
         let mut data = vec![0u8; self.max_input_size];
-        let len = unsafe { nyx_get_fuzz_input(data.as_mut_ptr(), data.len()) };
+        let len = unsafe { nyx_lite_get_fuzz_input(data.as_mut_ptr(), data.len()) };
         data.truncate(len);
         data
     }
@@ -71,29 +74,29 @@ impl Runner for NyxRunner {
         unsafe {
             // this println is necessary as libafl doesn't have the ability to read the message if we print it through nyx_fail
             // therefore we can only use nyx_println to print the message and receive it through `stdout` buffer of `NyxExecutor`
-            nyx_println(c_message.as_ptr(), c_message.count_bytes());
-            nyx_fail(c_message.as_ptr());
+            nyx_lite_println(c_message.as_ptr(), c_message.count_bytes());
+            nyx_lite_fail(c_message.as_ptr());
         }
     }
 
     fn skip(&self) {
         unsafe {
-            nyx_skip();
+            nyx_lite_skip();
         }
     }
 }
-#[cfg(feature = "nyx")]
+#[cfg(feature = "nyx_lite")]
 impl Drop for NyxRunner {
     fn drop(&mut self) {
         unsafe {
-            nyx_release();
+            nyx_lite_release();
         }
     }
 }
 
-#[cfg(feature = "nyx")]
+#[cfg(feature = "nyx_lite")]
 type DefaultRunner = NyxRunner;
-#[cfg(not(feature = "nyx"))]
+#[cfg(not(feature = "nyx_lite"))]
 type DefaultRunner = LocalRunner;
 
 pub struct StdRunner {

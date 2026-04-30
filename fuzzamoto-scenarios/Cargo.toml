@@ -7,11 +7,12 @@ license.workspace = true
 repository.workspace = true
 
 [features]
-fuzz = ["compile_in_vm", "force_send_and_ping", "nyx"]
+fuzz = ["compile_in_vm", "force_send_and_ping", "nyx_lite"]
 reproduce = ["compile_in_vm", "force_send_and_ping", "fuzzamoto/reproduce"]
 coverage = ["fuzzamoto/coverage"]
 
 nyx = ["dep:fuzzamoto-nyx-sys"]
+nyx_lite = ["dep:fuzzamoto-nyx-lite"]
 compile_in_vm = []
 # Force every sent message to be followed by two ping/pong roundtrips
 force_send_and_ping = []
@@ -35,6 +36,7 @@ workspace = true
 fuzzamoto = { path = "../fuzzamoto" }
 fuzzamoto-ir = { path = "../fuzzamoto-ir" }
 fuzzamoto-nyx-sys = { path = "../fuzzamoto-nyx-sys", optional = true }
+fuzzamoto-nyx-lite = { path = "../fuzzamoto-nyx-lite", optional = true }
 
 bitcoin = "0.32.0"
 bitcoin_hashes = "0.16.0"

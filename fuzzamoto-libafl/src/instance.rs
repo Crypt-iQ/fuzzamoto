@@ -117,6 +117,11 @@ where
             .first()
             .expect("unable to get first core id");
 
+        // TODO: Launch VM.
+        let instance_id = vmm::logger::DEFAULT_INSTANCE_ID.to_string();
+        //
+        let mut vm = NyxVM::new(instance_id.clone(), ...);
+
         let timeout = Duration::from_millis(u64::from(self.options.timeout));
         let settings = NyxSettings::builder()
             .cpu_id(self.client_description.core_id().0)
@@ -132,6 +137,9 @@ where
 
         let helper = NyxHelper::new(self.options.shared_dir(), settings)?;
 
+        // is helper.bitmap_buffer init'd at this point?
+        // - yes, the QemuProcess runs for the initial "fuzzing loop" and tells the host of
+        //   trace buffer size & location, other things.
         let trace_observer = HitcountsMapObserver::new(unsafe {
             StdMapObserver::from_mut_ptr("trace", helper.bitmap_buffer, helper.bitmap_size)
         })
