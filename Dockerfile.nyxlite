@@ -34,7 +34,16 @@ RUN apt-get update && apt install -y --no-install-recommends \
   libssl-dev \
   tmux \
   vim \
-  gnuplot
+  gnuplot \
+  flex \
+  bison \
+  gcc \
+  docker-ce \
+  docker-ce-cli \
+  containerd.io \
+  docker-buildx-plugin \
+  docker-compose-plugin \
+  qemu-utils
 
 RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
 ENV PATH="/root/.cargo/bin:${PATH}"
@@ -103,39 +112,3 @@ ENV LD=lld-${LLVM_V}
 RUN git config --global --add safe.directory /fuzzamoto
 
 COPY ./ci /ci
-
-# Equivalent of build-img.sh
-# - need to compile the scenario binary
-# - does this need to be --privileged?
-RUN BITCOIND_PATH=/bitcoin/build_fuzz/bin/bitcoind cargo build --workspace --target=x86_64-unknown-linux-musl --release --features fuzz
-RUN apt install -y flex bison gcc
-
-# Are the following needed:
-# * --sharedir
-# * --crash-handler
-# * --nyx-dir
-RUN ./target/release/fuzzamoto-cli init --sharedir /tmp/fuzzamoto_scenario-ir --crash-handler /fuzzamoto/doesntexist.so --bitcoind /bitcoin/build_fuzz/bin/bitcoind --scenario ./target/release/scenario-ir --nyx-dir ./target/release
-
-RUN mount -o remount,size=50% /dev/shm
-
-RUN mkdir /tmp/in
-
-# Dockerfile.vm
-COPY Dockerfile.vm Dockerfile.vm
-
-RUN rm resources/scenario_ir
-
-RUN cp -L target/x86_64-unknown-linux-musl/release/scenario_ir resources/scenario_ir
-
-RUN apt-get install -y --no-install-recommends docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
-
-RUN apt-get install -y --no-install-recommends qemu-utils
-
-# escape=\
-
-# The below command(s) creates a firecracker config file
-RUN IMG_ID=$\(docker build -f Dockerfile.vm -q .\); CONTAINER_ID=$\(docker run -td $IMG_ID /bin/bash\); MOUNTDIR=mnt; FS=rootfs.ext4; sudo rm -rf $MOUNTDIR; sudo rm -rf $FS; mkdir $MOUNTDIR; qemu-img create -f raw $FS 800M; mkfs.ext4 $FS; sudo mount $FS $MOUNTDIR; sudo docker cp $CONTAINER_ID:/ $MOUNTDIR; sudo umount $MOUNTDIR; rm -rf $MOUNTDIR; docker stop $CONTAINER_ID; docker rm $CONTAINER_ID
-
-# Outside of the container, run:
-# * Need to pass in the config file
-# * RUST_LOG=info RUST_BACKTRACE=1 ./target/release/fuzzamoto-libafl --verbose --input /tmp/in --output /tmp/out --share /tmp/fuzzamoto_scenario-ir/ --cores 0-$1 --ignore-hangs --timeout 3000 2>&1 | tee fuzzamoto.log 
