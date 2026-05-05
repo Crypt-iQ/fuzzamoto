@@ -38,11 +38,7 @@ RUN apt-get update && apt install -y --no-install-recommends \
   flex \
   bison \
   gcc \
-  docker-ce \
-  docker-ce-cli \
-  containerd.io \
-  docker-buildx-plugin \
-  docker-compose-plugin \
+  docker \
   qemu-utils
 
 RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
