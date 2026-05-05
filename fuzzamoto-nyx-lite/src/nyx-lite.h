@@ -28,7 +28,7 @@ static inline void nyx_lite_hypercall(uint64_t hypercall_num, uint64_t arg1, uin
     assert(rax == 0);
 }
 
-static inline void nyx_lite_register_region(char* name, byte[] mem, uint64_t mem_size) {
+static inline void nyx_lite_register_region(char* name, unsigned char[] mem, uint64_t mem_size) {
     nyx_lite_hypercall(HYPERCALL_SHAREMEM, (uintptr_t)name, (uintptr_t)mem, mem_size);
 }
 
