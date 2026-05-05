@@ -17,7 +17,7 @@ impl InitCommand {
         file_ops::ensure_sharedir_not_exists(sharedir)?;
         file_ops::create_dir_all(sharedir)?;
 
-        file_ops::ensure_file_exists(crash_handler)?;
+        //file_ops::ensure_file_exists(crash_handler)?;
         file_ops::ensure_file_exists(bitcoind)?;
         file_ops::ensure_file_exists(scenario)?;
 
@@ -82,7 +82,7 @@ impl InitCommand {
         }
 
         // Add crash handler to dependencies
-        let crash_handler_name = crash_handler
+/*        let crash_handler_name = crash_handler
             .file_name()
             .ok_or_else(|| CliError::InvalidInput("Invalid crash handler path".to_string()))?
             .to_str()
@@ -91,17 +91,18 @@ impl InitCommand {
 
         file_ops::copy_file_to_dir(crash_handler, sharedir)?;
         all_deps.push(crash_handler_name.clone());
+*/
         all_deps.sort();
         all_deps.dedup();
 
         log::info!("Created share directory: {}", sharedir.display());
-
+/*
         nyx::compile_packer_binaries(nyx_dir)?;
         nyx::copy_packer_binaries(nyx_dir, sharedir)?;
         nyx::generate_nyx_config(nyx_dir, sharedir)?;
-
+*/
         // Create fuzz_no_pt.sh script
-        let scenario_name = scenario
+/*        let scenario_name = scenario
             .file_name()
             .ok_or_else(|| CliError::InvalidInput("Invalid scenario path".to_string()))?
             .to_str()
@@ -126,7 +127,7 @@ impl InitCommand {
             secondary_name,
             rpc_name,
         )?;
-
+*/
         Ok(())
     }
 }
