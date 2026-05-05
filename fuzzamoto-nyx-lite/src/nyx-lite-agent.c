@@ -1,5 +1,6 @@
 #include <stdint.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 #include <sys/ipc.h>
 #include <sys/shm.h>
@@ -23,7 +24,9 @@ size_t nyx_lite_init() {
 
 #ifdef TARGET_MAP_SIZE
     bitmap_size = TARGET_MAP_SIZE;
-    nyx_lite_debugprint(printf("[init] using TARGET_MAP_SIZE: %d\n", bitmap_size));
+    char* debugstr;
+    asprintf(&debugstr, "[init] using TARGET_MAP_SIZE: %d\n", bitmap_size);
+    nyx_lite_debugprint(debugstr);
 #else
     nyx_lite_abort("Error: TARGET_MAP_SIZE unset");
 #endif

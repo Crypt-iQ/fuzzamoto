@@ -29,7 +29,7 @@ static inline void nyx_lite_hypercall(uint64_t hypercall_num, uint64_t arg1, uin
 }
 
 static inline void nyx_lite_register_region(char* name, unsigned char* mem, uint64_t mem_size) {
-    nyx_lite_hypercall(HYPERCALL_SHAREMEM, (uintptr_t)name, (uintptr_t)mem, mem_size);
+    nyx_lite_hypercall(HYPERCALL_SHAREMEM, (uintptr_t)name, (uintptr_t)mem, mem_size, 0);
 }
 
 static inline void nyx_lite_snapshot() {
@@ -46,6 +46,6 @@ static inline void nyx_lite_debugprint(char* msg) {
 
 static inline void nyx_lite_abort(char* msg) {
     nyx_lite_hypercall(HYPERCALL_FUZZABORT, (uintptr_t)msg, 0, 0, 0);
-}
+
 
 #endif
