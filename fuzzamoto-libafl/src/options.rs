@@ -165,6 +165,9 @@ pub struct FuzzerOptions {
         help = "Profile that defines which generators are enabled"
     )]
     pub profile: Profile,
+
+    #[arg(short, long, help = "nyx-lite vm config path")]
+    pub vmm_config_json: str,
 }
 
 fn unix_time() -> u64 {

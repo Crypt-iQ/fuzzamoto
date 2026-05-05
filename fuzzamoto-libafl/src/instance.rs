@@ -41,11 +41,12 @@ use libafl_bolts::{
 
 use std::collections::BTreeMap;
 
-use libafl_nyx::{executor::NyxExecutor, helper::NyxHelper, settings::NyxSettings};
+//use libafl_nyx::{executor::NyxExecutor, helper::NyxHelper, settings::NyxSettings};
 use rand::{SeedableRng, rngs::SmallRng};
 use typed_builder::TypedBuilder;
 
 use crate::{
+    executor::NyxLiteExecutor,
     feedbacks::{CaptureTimeoutFeedback, CrashCauseFeedback},
     input::IrInput,
     mutators::{IrGenerator, IrMutator, IrSpliceMutator, LibAflByteMutator},
@@ -53,6 +54,9 @@ use crate::{
     schedulers::SupportedSchedulers,
     stages::{IrMinimizerStage, ProbingStage, StabilityCheckStage, VerifyTimeoutsStage},
 };
+
+use vmm::logger::DEFAULT_INSTANCE_ID;
+use nyx_lite::NyxVM;
 
 #[cfg(feature = "bench")]
 use crate::stages::BenchStatsStage;
@@ -118,12 +122,21 @@ where
             .expect("unable to get first core id");
 
         // TODO: Launch VM.
-        let instance_id = vmm::logger::DEFAULT_INSTANCE_ID.to_string();
-        //
-        let mut vm = NyxVM::new(instance_id.clone(), ...);
+        let instance_id = DEFAULT_INSTANCE_ID.to_string();
+        let mut vm = NyxVM::new(instance_id.clone(), self.options.vmm_config_json);
 
-        let timeout = Duration::from_millis(u64::from(self.options.timeout));
-        let settings = NyxSettings::builder()
+        // executor = NyxLiteExecutor::new(vm);
+
+        // TODO: Run VM until nyx_init to pass in the bitmap ptr and size -> StdMapObserver::from_mut_ptr.
+        let dummy_map = vec![1, 2, 3];
+        let trace_observer = HitcountsMapObserver::new(unsafe {
+            StdMapObserver::new(dummy_map)
+        })
+        .track_indices()
+        .track_novelties();
+
+        //let timeout = Duration::from_millis(u64::from(self.options.timeout));
+        /*let settings = NyxSettings::builder()
             .cpu_id(self.client_description.core_id().0)
             .parent_cpu_id(Some(parent_cpu_id.0))
             .input_buffer_size(self.options.buffer_size)
@@ -136,15 +149,14 @@ where
             .build();
 
         let helper = NyxHelper::new(self.options.shared_dir(), settings)?;
+        */
 
-        // is helper.bitmap_buffer init'd at this point?
-        // - yes, the QemuProcess runs for the initial "fuzzing loop" and tells the host of
-        //   trace buffer size & location, other things.
-        let trace_observer = HitcountsMapObserver::new(unsafe {
+        /*let trace_observer = HitcountsMapObserver::new(unsafe {
             StdMapObserver::from_mut_ptr("trace", helper.bitmap_buffer, helper.bitmap_size)
         })
         .track_indices()
         .track_novelties();
+        */
 
         // Create an observation channel to keep track of the execution time
         let time_observer = TimeObserver::new("time");
@@ -160,7 +172,7 @@ where
             u32::try_from(self.client_description.core_id().0)
                 .expect("core_id should fit into u32"),
             map_feedback_name.clone(),
-            helper.bitmap_size,
+            0, /*helper.bitmap_size*/,
             Duration::from_secs(self.options.bench_snapshot_secs()),
             self.options.bench_dir().join(format!(
                 "bench-cpu_{:03}.csv",
@@ -268,7 +280,8 @@ where
         if let Some(rerun_input) = &self.options.rerun_input {
             let input = IrInput::unparse(rerun_input);
 
-            let mut executor = NyxExecutor::builder().build(helper, observers);
+            //let mut executor = NyxExecutor::builder().build(helper, observers);
+            let mut executor = NyxLiteExecutor::new(vm);
 
             let exit_kind = executor
                 .run_target(
@@ -283,9 +296,11 @@ where
             process::exit(0);
         }
 
-        let mut executor = NyxExecutor::builder()
+        /*let mut executor = NyxExecutor::builder()
             .stdout(stdout_observer_handle.clone())
             .build(helper, observers);
+        */
+        let mut executor = NyxLiteExecutor::new(vm);
 
         let ir_context_dump = self.options.work_dir().join("dump/ir.context");
         let bytes = std::fs::read(ir_context_dump).expect("Could not read ir context file");
