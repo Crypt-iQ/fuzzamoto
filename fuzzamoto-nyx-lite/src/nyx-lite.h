@@ -46,6 +46,6 @@ static inline void nyx_lite_debugprint(char* msg) {
 
 static inline void nyx_lite_abort(char* msg) {
     nyx_lite_hypercall(HYPERCALL_FUZZABORT, (uintptr_t)msg, 0, 0, 0);
-
+}
 
 #endif
