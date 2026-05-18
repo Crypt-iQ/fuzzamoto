@@ -18,6 +18,7 @@ compile_in_vm = []
 force_send_and_ping = []
 # Use BIP-324 v2 transport instead of v1
 v2transport = []
+i2p_inbound = []
 
 # Compile for block template validation
 oracle_blocktemplate = []

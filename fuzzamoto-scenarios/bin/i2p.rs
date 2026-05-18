@@ -1,55 +1,57 @@
 //! I2P SAM control-protocol fuzzing scenario for Bitcoin Core.
 //!
-//! This fuzzes the **SAM proxy protocol parser itself** in `i2p.cpp` rather
-//! than using SAM as plumbing to reach P2P. The fuzz input controls every
-//! byte the (fake, in-process) SAM proxy sends back, so the bytes flowing
-//! into the reply parser are attacker-controlled. Code under test:
+//! Fuzzes the **SAM proxy protocol parser** in `i2p.cpp`: reply tokenizing
+//! (`SendRequestAndGetReply`, `Reply::Get`, `Split`), `SwapBase64` /
+//! `DecodeI2PBase64`, `DestBinToAddr` -> `CNetAddr::SetSpecial`,
+//! `MyDestination` certificate-length parsing, and the `SESSION CREATE` /
+//! `NAMING LOOKUP` / `STREAM CONNECT` / `STREAM ACCEPT` result handling
+//! including their `INVALID_ID` / `CANT_REACH_PEER` / `TIMEOUT` /
+//! `RESULT=I2P_ERROR` branches and the `CheckControlSock` / `Disconnect`
+//! teardown paths. The fuzz input controls every byte the fake in-process
+//! SAM proxy sends back.
 //!
-//!   * `Session::SendRequestAndGetReply` — receive + tokenize a reply
-//!   * `Reply` keyword map construction (`Split(full, ' ')`, split on `=`)
-//!   * `Reply::Get` (missing-key / valueless-key `runtime_error` paths)
-//!   * `SwapBase64` / `DecodeI2PBase64` (bad Base64 -> throw)
-//!   * `DestBinToAddr` -> `CNetAddr::SetSpecial` (bad address -> throw)
-//!   * `MyDestination` certificate-length parsing (short key / oversized
-//!     cert-length -> throw) on the transient `DESTINATION=` path
-//!   * `SESSION CREATE` / `NAMING LOOKUP` / `STREAM CONNECT` result handling,
-//!     including the `INVALID_ID` / `CANT_REACH_PEER` / `TIMEOUT` branches
-//!     and the `CheckControlSock` / `Disconnect` teardown paths
+//! ## Two modes (compile-time)
 //!
-//! ## Reaching the parser within the snapshot model
+//! * **Outbound (default).** `-i2pacceptincoming=0`, so `net.cpp` builds no
+//!   persistent session and there is *no* SAM traffic before the snapshot.
+//!   Each post-snapshot `addnode <i2p> onetry` builds a fresh **transient**
+//!   session whose full `HELLO` / `SESSION CREATE` (transient `DESTINATION=`)
+//!   / `NAMING LOOKUP` / `STREAM CONNECT` exchange is fuzzed.
 //!
-//! The fuzzamoto snapshot is taken inside `runner.get_fuzz_input()`, *after*
-//! `Scenario::new` returns, so any SAM traffic required for the node to
-//! finish starting up would have to be deterministic and could not consume
-//! fuzz bytes. We avoid that entirely by running with
-//! `-i2pacceptincoming=0`: `net.cpp` only constructs the persistent
-//! `m_i2p_sam_session` when accept-incoming is enabled, so with it off there
-//! is **no SAM traffic at all before the snapshot**.
+//! * **Inbound** (`--features i2p_inbound`). `-i2pacceptincoming=1`, so
+//!   `ThreadI2PAcceptIncoming` runs: `Listen()` ->
+//!   `CreateIfNotCreatedAlready()` (persistent: `HELLO`, possibly
+//!   `DEST GENERATE`, `SESSION CREATE`) once at startup, then a continuous
+//!   loop of `StreamAccept()` (`HELLO` + `STREAM ACCEPT` on a fresh socket)
+//!   followed by `Accept()` reading a peer destination line. The startup
+//!   handshake happens *before* the snapshot, so the proxy answers it with
+//!   **canned valid** replies (deterministic); every post-snapshot
+//!   `STREAM ACCEPT` round and the peer-destination line `Accept()` reads
+//!   are **fuzzed**. This is the more security-relevant surface: those bytes
+//!   originate from an untrusted remote peer relayed by the router.
 //!
-//! Every outbound I2P dial then builds a fresh **transient** session
-//! (`Session(const Proxy&, ...)`), whose complete control exchange happens
-//! post-snapshot and is fully fuzzed:
+//! ## Adversarial framing (#2)
 //!
-//! ```text
-//!   HELLO VERSION MIN=3.1 MAX=3.1
-//!   SESSION CREATE STYLE=STREAM ID=.. DESTINATION=TRANSIENT SIGNATURE_TYPE=7 ...
-//!   NAMING LOOKUP NAME=<addr>
-//!   STREAM CONNECT ID=<id> DESTINATION=<dest> SILENT=false
-//! ```
+//! Each fuzzed reply also carries fuzz-controlled *delivery* options, so the
+//! proxy can behave like a hostile router, not just send a clean line:
+//!   * split the blob into many small TCP writes,
+//!   * omit the trailing `\n` terminator entirely (exercises the
+//!     `RecvUntilTerminator` `MAX_MSG_SIZE` runaway-guard / timeout that
+//!     `i2p.h` documents as defending against a malicious proxy),
+//!   * close the socket mid-reply.
+//! A hard wall-clock guard keeps throughput sane despite the no-terminator
+//! case (`i2p.cpp`'s real control timeout is 3 minutes; we never wait that
+//! long — see `NO_TERM_LINGER`).
 //!
-//! Each test case triggers N outbound dials (`addnode <i2p> onetry`); the
-//! proxy answers each SAM request with the next fuzz-controlled blob.
+//! ## Snapshot model
 //!
-//! ## Liveness
-//!
-//! `i2p.cpp` reads replies via `RecvUntilTerminator('\n', timeout, ...)`
-//! (control timeout 3 min, `MAX_MSG_SIZE` 64 KiB). To keep throughput high
-//! the proxy always appends exactly one `\n` to each blob and caps blob
-//! length far below 64 KiB, so the parser never starves on a missing
-//! terminator — the interesting bugs are in how the content up to the
-//! terminator is handled, not in starvation. After the dials the node is
-//! checked with `is_alive`; a crash/assert/hang in the I2P path fails the
-//! case.
+//! The fuzzamoto snapshot is taken in `runner.get_fuzz_input()`, after
+//! `Scenario::new` returns. Outbound mode has zero pre-snapshot SAM traffic.
+//! Inbound mode's only pre-snapshot SAM traffic is the one deterministic
+//! persistent-session handshake, answered with fixed valid bytes. Either
+//! way each reset replays from an identical post-setup state and the fuzz
+//! input drives only post-snapshot SAM bytes. Liveness is checked with
+//! `is_alive`; a crash/assert/hang in the I2P path fails the case.
 
 use fuzzamoto::{
     fuzzamoto_main,
@@ -66,74 +68,105 @@ use std::{
         mpsc, Arc, Mutex,
     },
     thread,
-    time::Duration,
+    time::{Duration, Instant},
 };
 
-/// SAM 3.1 fixed virtual port. `i2p.cpp::Session::Connect` refuses any other
-/// port, so the dialed I2P address must use it.
+/// SAM 3.1 fixed virtual port. `i2p.cpp::Session::Connect` refuses any other.
+/// Only used to build the dialed address in outbound mode; in inbound mode
+/// no address is dialed, so gate it the same way as `dial_addr` to avoid a
+/// dead-code error under `-D warnings`.
+#[cfg(not(feature = "i2p_inbound"))]
 const I2P_SAM31_PORT: u16 = 0;
 
-/// Hard cap on one fuzz-controlled reply blob — well below the 64 KiB
-/// `MAX_MSG_SIZE` so a missing `\n` can never starve the parser (the proxy
-/// always appends exactly one `\n`).
+/// Hard cap on one fuzz-controlled reply blob, well below the 64 KiB
+/// `MAX_MSG_SIZE` so the *terminated* case never approaches the runaway
+/// guard; the no-terminator case is bounded by time instead (below).
 const MAX_REPLY_BLOB: usize = 4096;
 
 /// Max SAM requests answered per control socket (defensive against the node
-/// looping on one socket and exhausting the script).
+/// looping on one socket and exhausting the lane).
 const MAX_REQUESTS_PER_CONN: usize = 16;
+
+/// When a reply deliberately omits its `\n` terminator, the node will block
+/// in `RecvUntilTerminator` until its own timeout (3 min control / shorter
+/// for accept). We must not wait that long, so after sending the
+/// unterminated bytes we linger only briefly, then close the socket. Closing
+/// makes `RecvUntilTerminator` observe EOF and raise promptly — exercising
+/// the same error path far faster.
+const NO_TERM_LINGER: Duration = Duration::from_millis(150);
+
+/// Backstop for the per-case completion wait (see `run`). Real proxy
+/// connections arrive within tens of ms or not at all.
+const COMPLETION_BACKSTOP: Duration = Duration::from_secs(5);
 
 // --------------------------------------------------------------------------
 // Fuzz input
 // --------------------------------------------------------------------------
 
-/// One scripted reply: raw bytes the proxy sends for the next SAM request
-/// (a single `\n` is always appended). If `promote` is set, after sending
-/// the proxy treats the socket as a raw stream and stops parsing — emulating
-/// a successful `STREAM CONNECT` so the post-connect `net.cpp` path is also
-/// reached.
+/// How the proxy *delivers* a reply blob (adversarial framing, #2).
+#[derive(Clone, Copy, PartialEq)]
+enum Framing {
+    /// Send blob, then exactly one `\n` (well-formed proxy).
+    Clean,
+    /// Send blob in 1-byte TCP writes, then one `\n` (fragmented).
+    Chunked,
+    /// Send blob with NO terminator, linger `NO_TERM_LINGER`, then close
+    /// (forces the node's recv timeout / EOF error path).
+    NoTerminator,
+    /// Send blob (+`\n`), then immediately close the socket (mid-exchange
+    /// teardown; exercises `CheckControlSock`/`Disconnect`).
+    CloseAfter,
+}
+
+impl Framing {
+    fn from_bits(b: u8) -> Self {
+        match b & 0b11 {
+            0 => Framing::Clean,
+            1 => Framing::Chunked,
+            2 => Framing::NoTerminator,
+            _ => Framing::CloseAfter,
+        }
+    }
+}
+
+/// One scripted reply: raw bytes + delivery framing + the `promote` bit
+/// (after a successful `STREAM CONNECT`/`STREAM ACCEPT` the node treats the
+/// socket as a raw P2P stream; we then just drain so net.cpp's post-connect
+/// plumbing is also reached).
 #[derive(Clone)]
 struct Reply {
     blob: Vec<u8>,
+    framing: Framing,
     promote: bool,
 }
 
 struct TestCase {
-    /// One lane per outbound dial / SAM control connection. `lanes[k]` is the
-    /// ordered list of replies the proxy will serve to the k-th connection
-    /// (request 0 -> HELLO reply, 1 -> SESSION CREATE reply, 2 -> NAMING
-    /// LOOKUP reply, 3 -> STREAM CONNECT reply; beyond that a bare `\n`).
+    /// One lane per SAM control connection the node opens. Outbound mode:
+    /// lane = one transient dial's reply sequence. Inbound mode: lane = one
+    /// `StreamAccept`/`Accept` round's replies (request 0 -> HELLO reply,
+    /// 1 -> STREAM ACCEPT reply, 2 -> the peer-destination line read by
+    /// `Session::Accept`).
     lanes: Vec<Vec<Reply>>,
 }
 
 impl<'a> ScenarioInput<'a> for TestCase {
     /// Tolerant, length-prefixed wire format (truncation never errors — the
-    /// decoder just stops early so the mutator can splice freely):
+    /// decoder stops early so the mutator can splice freely):
     ///
     /// ```text
-    ///   u8        n_lanes        -> clamped to 1..=64 (one per dial)
+    ///   u8        first_byte   -> n_lanes = (first_byte % 64) + 1   (1..=64)
     ///   n_lanes x {
-    ///     u8      n_replies      -> clamped to 0..=8 (a transient session
-    ///                               issues <=4 SAM requests; allow a little
-    ///                               slack for session-recreate retries)
+    ///     u8      n_replies    -> min(b, 8)
     ///     n_replies x {
-    ///       u8     flags         (bit0 = promote)
-    ///       u16 le blob_len      (clamped to MAX_REPLY_BLOB and to remaining)
+    ///       u8     flags       (bit0 = promote; bits1..2 = Framing)
+    ///       u16 le blob_len    (clamped to MAX_REPLY_BLOB and to remaining)
     ///       blob_len blob
     ///     }
     ///   }
     /// ```
-    ///
-    /// The number of dials the scenario triggers is exactly `lanes.len()`, so
-    /// dial *k* deterministically consumes lane *k* no matter how the dials
-    /// interleave on the node's net thread.
     fn decode(bytes: &'a [u8]) -> Result<Self, String> {
-        // Plain cursor; no closure capturing it, so we can freely test
-        // exhaustion (`pos >= bytes.len()`) alongside reads.
         let mut pos = 0usize;
 
-        // Read up to `n` bytes, advancing the cursor. Never panics: a short
-        // read just returns fewer bytes (possibly empty), so truncated fuzz
-        // input is tolerated rather than erroring.
         fn take<'b>(bytes: &'b [u8], pos: &mut usize, n: usize) -> &'b [u8] {
             let start = (*pos).min(bytes.len());
             let end = (*pos + n).min(bytes.len());
@@ -148,8 +181,6 @@ impl<'a> ScenarioInput<'a> for TestCase {
 
         let mut lanes: Vec<Vec<Reply>> = Vec::with_capacity(n_lanes);
         for _ in 0..n_lanes {
-            // If input is exhausted, remaining lanes are empty (the proxy
-            // then answers each request with a bare `\n`).
             let n_replies = usize::from(byte(bytes, &mut pos, 0)).min(8);
             let mut lane = Vec::with_capacity(n_replies);
             for _ in 0..n_replies {
@@ -164,6 +195,7 @@ impl<'a> ScenarioInput<'a> for TestCase {
                 let blob = take(bytes, &mut pos, want).to_vec();
                 lane.push(Reply {
                     blob,
+                    framing: Framing::from_bits(flags >> 1),
                     promote: flags & 1 != 0,
                 });
             }
@@ -175,43 +207,77 @@ impl<'a> ScenarioInput<'a> for TestCase {
 }
 
 // --------------------------------------------------------------------------
-// Fake SAM proxy whose replies are entirely fuzz-controlled
+// Fake SAM proxy
 // --------------------------------------------------------------------------
 
-/// The fuzz-derived plan for one whole test case.
-///
-/// Replies are split into independent **lanes**, one per SAM control
-/// connection the node opens. Each accepted proxy connection atomically
-/// claims the next lane via `conn_counter` and only ever serves that lane's
-/// replies. This makes the outcome independent of the order/timing in which
-/// concurrent `addnode` dials reach the proxy, so no inter-dial sleep is
-/// needed for determinism: connection *k* always gets lane *k*'s bytes
-/// regardless of how the net thread interleaves the dials.
+/// A structurally valid I2P private key / destination blob: exactly 387
+/// bytes with a zero certificate length at bytes 385..387 (big-endian), so
+/// `i2p.cpp::Session::MyDestination` accepts it (dest_len = 387 <= 387). Used
+/// only for the deterministic, pre-snapshot persistent-session handshake in
+/// inbound mode; never fuzzed.
+fn canned_priv_key() -> Vec<u8> {
+    let mut k = vec![0u8; 387];
+    // Arbitrary fixed, deterministic content; the exact bytes don't matter,
+    // only the length and the zero cert-length field.
+    for (i, b) in k.iter_mut().enumerate() {
+        *b = (i as u8).wrapping_mul(31).wrapping_add(7);
+    }
+    k[385] = 0;
+    k[386] = 0;
+    k
+}
+
+const STD_B64: &[u8; 64] =
+    b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+
+fn base64_std(data: &[u8]) -> String {
+    let mut out = String::with_capacity(data.len().div_ceil(3) * 4);
+    for c in data.chunks(3) {
+        let b = [c[0], *c.get(1).unwrap_or(&0), *c.get(2).unwrap_or(&0)];
+        let n = (u32::from(b[0]) << 16) | (u32::from(b[1]) << 8) | u32::from(b[2]);
+        out.push(STD_B64[((n >> 18) & 63) as usize] as char);
+        out.push(STD_B64[((n >> 12) & 63) as usize] as char);
+        out.push(if c.len() > 1 {
+            STD_B64[((n >> 6) & 63) as usize] as char
+        } else {
+            '='
+        });
+        out.push(if c.len() > 2 {
+            STD_B64[(n & 63) as usize] as char
+        } else {
+            '='
+        });
+    }
+    out
+}
+
+/// I2P-flavoured Base64 (`+`->`-`, `/`->`~`) of the canned key, as
+/// `DEST GENERATE` / `SESSION CREATE` would return it.
+fn canned_dest_i2p_b64() -> String {
+    base64_std(&canned_priv_key())
+        .chars()
+        .map(|ch| match ch {
+            '+' => '-',
+            '/' => '~',
+            x => x,
+        })
+        .collect()
+}
+
+/// Per-connection completion signalling + lane handout.
 struct Session {
-    /// `lanes[k]` = the ordered replies for the k-th control connection.
     lanes: Vec<Vec<Reply>>,
-    /// Index of the next lane to hand out (one per accepted connection).
     conn_counter: AtomicUsize,
-    /// A connection sends `()` here exactly once, when its handler returns
-    /// (script exhausted, `promote` socket closed, or node hung up). `run()`
-    /// waits for one signal per expected connection instead of sleeping.
     done_tx: mpsc::Sender<()>,
 }
 
 impl Session {
-    /// Claim the next lane for a freshly accepted connection. Connections
-    /// beyond the number of lanes get an empty lane (proxy then only ever
-    /// replies with bare `\n`, keeping the parser unblocked).
     fn claim_lane(&self) -> Vec<Reply> {
         let k = self.conn_counter.fetch_add(1, Ordering::SeqCst);
         self.lanes.get(k).cloned().unwrap_or_default()
     }
 }
 
-/// The proxy resolves the *current* session lazily per control connection
-/// from this shared slot, so the scenario can install the fuzz-derived
-/// session *after* the snapshot is taken (the proxy thread itself is started,
-/// and captured by the snapshot, before any fuzz input exists).
 type SessionSlot = Arc<Mutex<Option<Arc<Session>>>>;
 
 fn spawn_sam_proxy(slot: SessionSlot) -> Result<SocketAddr, String> {
@@ -230,17 +296,22 @@ fn spawn_sam_proxy(slot: SessionSlot) -> Result<SocketAddr, String> {
                 let _ = stream.set_read_timeout(Some(Duration::from_secs(5)));
                 let slot = Arc::clone(&slot);
                 thread::spawn(move || {
-                    // Resolve the active session. If none is installed yet
-                    // there is also no fuzz traffic, so a bare empty session
-                    // (no completion signal) is correct.
-                    let Some(session) = slot.lock().ok().and_then(|g| g.clone()) else {
-                        return;
-                    };
-                    let lane = session.claim_lane();
-                    let _ = handle_control_conn(stream, lane);
-                    // Signal completion regardless of how the handler ended;
-                    // a dropped receiver (run() already moved on) is fine.
-                    let _ = session.done_tx.send(());
+                    // No session installed yet => pre-snapshot. In inbound
+                    // mode that is the persistent handshake: answer it with
+                    // canned-valid replies and DO NOT signal completion (it
+                    // is not a fuzzed lane). In outbound mode there is no
+                    // pre-snapshot traffic, so this branch is just defensive.
+                    let session = slot.lock().ok().and_then(|g| g.clone());
+                    match session {
+                        None => {
+                            let _ = handle_canned_conn(stream);
+                        }
+                        Some(session) => {
+                            let lane = session.claim_lane();
+                            let _ = handle_fuzzed_conn(stream, lane);
+                            let _ = session.done_tx.send(());
+                        }
+                    }
                 });
             }
         })
@@ -249,11 +320,74 @@ fn spawn_sam_proxy(slot: SessionSlot) -> Result<SocketAddr, String> {
     Ok(addr)
 }
 
-/// Read SAM requests line-by-line and answer each with the next reply from
-/// this connection's lane (+ one `\n`). We deliberately do not parse/validate
-/// the request — the node's parser is the target, not ours — we only detect
-/// the `\n` that ends a request so reply timing matches a real proxy.
-fn handle_control_conn(stream: TcpStream, lane: Vec<Reply>) -> std::io::Result<()> {
+/// Peek the SAM verb of a request line without consuming/parsing semantics.
+/// We only need to distinguish a few first words to answer the *pre-snapshot*
+/// persistent handshake correctly.
+fn sam_verb(line: &[u8]) -> &'static str {
+    let s = line;
+    let starts = |p: &[u8]| s.len() >= p.len() && &s[..p.len()] == p;
+    if starts(b"HELLO") {
+        "HELLO"
+    } else if starts(b"DEST GENERATE") {
+        "DEST"
+    } else if starts(b"SESSION CREATE") {
+        "SESSION"
+    } else if starts(b"STREAM ACCEPT") {
+        "STREAM_ACCEPT"
+    } else if starts(b"STREAM CONNECT") {
+        "STREAM_CONNECT"
+    } else if starts(b"NAMING LOOKUP") {
+        "NAMING"
+    } else {
+        "OTHER"
+    }
+}
+
+/// Pre-snapshot, non-fuzzed connection: answer the persistent-session
+/// handshake (`HELLO`, optional `DEST GENERATE`, `SESSION CREATE`) and any
+/// `STREAM ACCEPT` with deterministically valid SAM so the node finishes
+/// startup. Only reached in inbound mode before the fuzz session is
+/// installed.
+fn handle_canned_conn(stream: TcpStream) -> std::io::Result<()> {
+    let mut reader = stream.try_clone()?;
+    let mut writer = stream;
+    let mut buf = [0u8; 1024];
+    let mut line: Vec<u8> = Vec::new();
+    let dest = canned_dest_i2p_b64();
+
+    loop {
+        let n = match reader.read(&mut buf) {
+            Ok(0) | Err(_) => return Ok(()),
+            Ok(n) => n,
+        };
+        line.extend_from_slice(&buf[..n]);
+        while let Some(p) = line.iter().position(|&b| b == b'\n') {
+            let req: Vec<u8> = line.drain(..=p).collect();
+            let reply: String = match sam_verb(&req) {
+                "HELLO" => "HELLO REPLY RESULT=OK VERSION=3.1\n".into(),
+                "DEST" => format!("DEST REPLY PUB={dest} PRIV={dest}\n"),
+                "SESSION" => {
+                    format!("SESSION STATUS RESULT=OK DESTINATION={dest}\n")
+                }
+                "STREAM_ACCEPT" => "STREAM STATUS RESULT=OK\n".into(),
+                "NAMING" => {
+                    format!("NAMING REPLY RESULT=OK NAME=ME VALUE={dest}\n")
+                }
+                "STREAM_CONNECT" => "STREAM STATUS RESULT=OK\n".into(),
+                _ => "RESULT=OK\n".into(),
+            };
+            if writer.write_all(reply.as_bytes()).is_err()
+                || writer.flush().is_err()
+            {
+                return Ok(());
+            }
+        }
+    }
+}
+
+/// Post-snapshot, fuzzed connection: each SAM request gets the next lane
+/// reply, delivered with its fuzz-chosen framing.
+fn handle_fuzzed_conn(stream: TcpStream, lane: Vec<Reply>) -> std::io::Result<()> {
     let mut reader = stream.try_clone()?;
     let mut writer = stream;
 
@@ -265,45 +399,77 @@ fn handle_control_conn(stream: TcpStream, lane: Vec<Reply>) -> std::io::Result<(
         if served >= MAX_REQUESTS_PER_CONN {
             return Ok(());
         }
-
         let n = match reader.read(&mut buf) {
-            Ok(0) => return Ok(()),  // node closed the control socket
+            Ok(0) | Err(_) => return Ok(()),
             Ok(n) => n,
-            Err(_) => return Ok(()), // read timeout / socket gone
         };
         line.extend_from_slice(&buf[..n]);
 
-        // Possibly several pipelined requests; answer each terminated one.
-        while let Some(pos) = line.iter().position(|&b| b == b'\n') {
-            let _request: Vec<u8> = line.drain(..=pos).collect();
+        while let Some(p) = line.iter().position(|&b| b == b'\n') {
+            let _req: Vec<u8> = line.drain(..=p).collect();
 
-            // The k-th request on this connection consumes lane[k]; once the
-            // lane is exhausted we still send a bare `\n` so the parser gets
-            // a terminator and the node makes forward progress.
             let reply = lane.get(served).cloned().unwrap_or(Reply {
                 blob: Vec::new(),
+                framing: Framing::Clean,
                 promote: false,
             });
             served += 1;
 
-            let blob = if reply.blob.len() > MAX_REPLY_BLOB {
+            let blob: &[u8] = if reply.blob.len() > MAX_REPLY_BLOB {
                 &reply.blob[..MAX_REPLY_BLOB]
             } else {
-                &reply.blob[..]
+                &reply.blob
             };
-            if writer.write_all(blob).is_err()
-                || writer.write_all(b"\n").is_err()
-                || writer.flush().is_err()
-            {
-                return Ok(());
+
+            match reply.framing {
+                Framing::Clean => {
+                    if writer.write_all(blob).is_err()
+                        || writer.write_all(b"\n").is_err()
+                        || writer.flush().is_err()
+                    {
+                        return Ok(());
+                    }
+                }
+                Framing::Chunked => {
+                    let mut ok = true;
+                    for byte in blob {
+                        if writer.write_all(&[*byte]).is_err()
+                            || writer.flush().is_err()
+                        {
+                            ok = false;
+                            break;
+                        }
+                    }
+                    if !ok
+                        || writer.write_all(b"\n").is_err()
+                        || writer.flush().is_err()
+                    {
+                        return Ok(());
+                    }
+                }
+                Framing::NoTerminator => {
+                    // Send the bytes WITHOUT a terminator, linger briefly so
+                    // the node is genuinely blocked in RecvUntilTerminator,
+                    // then close so it observes EOF and raises promptly
+                    // (instead of waiting out i2p.cpp's multi-minute
+                    // timeout). Same error path, bounded time.
+                    let _ = writer.write_all(blob);
+                    let _ = writer.flush();
+                    thread::sleep(NO_TERM_LINGER);
+                    return Ok(()); // drop => socket close => node sees EOF
+                }
+                Framing::CloseAfter => {
+                    let _ = writer.write_all(blob);
+                    let _ = writer.write_all(b"\n");
+                    let _ = writer.flush();
+                    return Ok(()); // immediate teardown
+                }
             }
 
             if reply.promote {
-                // Emulate a successful STREAM CONNECT/ACCEPT: the node now
-                // treats this socket as a raw P2P stream. Drain & ignore so
-                // the node never blocks on send; it will time the (silent)
-                // peer out. This exercises the SAM success path + the
-                // post-Connect plumbing in net.cpp.
+                // Successful STREAM CONNECT/ACCEPT: node now treats the
+                // socket as raw P2P. Drain & ignore; it will time the silent
+                // peer out. Exercises net.cpp post-connect plumbing.
                 let mut sink = [0u8; 4096];
                 loop {
                     match reader.read(&mut sink) {
@@ -321,7 +487,7 @@ fn handle_control_conn(stream: TcpStream, lane: Vec<Reply>) -> std::io::Result<(
 }
 
 // --------------------------------------------------------------------------
-// Bitcoin Core node, configured so ALL SAM traffic is post-snapshot
+// Bitcoin Core node
 // --------------------------------------------------------------------------
 
 struct I2PNode {
@@ -336,7 +502,7 @@ impl I2PNode {
         conf.p2p = P2P::Yes;
 
         let i2psam = format!("-i2psam={sam_addr}");
-/*
+
         #[cfg(feature = "inherit_stdout")]
         {
             conf.args.extend_from_slice(&[
@@ -346,7 +512,15 @@ impl I2PNode {
             ]);
             conf.view_stdout = true;
         }
-*/
+
+        // Inbound mode enables ThreadI2PAcceptIncoming (the persistent
+        // session + StreamAccept/Accept loop). Outbound mode disables it so
+        // there is zero pre-snapshot SAM traffic.
+        #[cfg(feature = "i2p_inbound")]
+        let accept_arg = "-i2pacceptincoming=1";
+        #[cfg(not(feature = "i2p_inbound"))]
+        let accept_arg = "-i2pacceptincoming=0";
+
         conf.args.extend_from_slice(&[
             "-txreconciliation",
             "-peerbloomfilters",
@@ -357,12 +531,8 @@ impl I2PNode {
             "-deprecatedrpc=create_bdb",
             "-keypool=10",
             "-listenonion=0",
-            // I2P proxy set, accept-incoming OFF: net.cpp never builds the
-            // persistent m_i2p_sam_session, so there is ZERO SAM traffic
-            // before the snapshot. Every post-snapshot dial creates a fresh
-            // transient session whose full SAM exchange is fuzz-driven.
             i2psam.as_str(),
-            "-i2pacceptincoming=0",
+            accept_arg,
             "-onlynet=i2p",
             "-maxmempool=5",
             "-dbcache=4",
@@ -406,9 +576,6 @@ struct I2PSamScenario {
 
 impl I2PSamScenario {
     fn build(exe_path: &str) -> Result<Self, String> {
-        // Proxy must be listening before the node starts so `-i2psam`
-        // resolves; the slot is empty until `run()` installs a session (and
-        // there is no SAM traffic before then anyway).
         let slot: SessionSlot = Arc::new(Mutex::new(None));
         let sam_addr = spawn_sam_proxy(Arc::clone(&slot))?;
         let node = I2PNode::start(exe_path, sam_addr)?;
@@ -416,17 +583,14 @@ impl I2PSamScenario {
     }
 }
 
-/// Build a syntactically valid, unique `.b32.i2p` address for dial `k`.
-///
-/// `CNetAddr::SetSpecial` accepts a 52-char lowercase base32 label followed
-/// by `.b32.i2p`. We only need *syntactic* validity (the proxy intercepts the
-/// NAMING LOOKUP), but each dial must be a *distinct* address or `addnode`
-/// would reject the duplicate and no new SAM session would be created.
+/// Distinct, syntactically valid 52-char base32 `.b32.i2p` address for dial
+/// `k` (outbound mode only). Must be unique or `addnode` rejects the
+/// duplicate. Index 51 stays `'a'` (base32 0) so the 4 padding bits are
+/// zero -> canonical, parseable by `CNetAddr::SetSpecial`.
+#[cfg(not(feature = "i2p_inbound"))]
 fn dial_addr(k: usize) -> String {
     const A: &[u8; 32] = b"abcdefghijklmnopqrstuvwxyz234567";
     let mut label = [b'a'; 52];
-    // Encode k into the first few base32 chars; rest stay 'a'. 52 base32
-    // symbols of entropy is far more than the <=64 dials we ever do.
     let mut v = k;
     let mut i = 0;
     while v > 0 && i < label.len() {
@@ -434,7 +598,6 @@ fn dial_addr(k: usize) -> String {
         v >>= 5;
         i += 1;
     }
-    // SAFETY: all bytes are ASCII base32.
     let label = std::str::from_utf8(&label).unwrap_or("a");
     format!("{label}.b32.i2p:{I2P_SAM31_PORT}")
 }
@@ -447,8 +610,6 @@ impl<'a> Scenario<'a, TestCase> for I2PSamScenario {
     fn run(&mut self, testcase: TestCase) -> ScenarioResult {
         let n_lanes = testcase.lanes.len();
 
-        // 1. Install this case's fuzz-controlled session. One completion
-        //    signal will be sent per proxy connection that the node opens.
         let (done_tx, done_rx) = mpsc::channel::<()>();
         let session = Arc::new(Session {
             lanes: testcase.lanes,
@@ -459,13 +620,13 @@ impl<'a> Scenario<'a, TestCase> for I2PSamScenario {
             *g = Some(Arc::clone(&session));
         }
 
-        // 2. Trigger one outbound I2P dial per lane. Each `addnode
-        //    <unique>.b32.i2p:0 onetry` makes net.cpp build a fresh transient
-        //    SAM session and run the full HELLO/SESSION CREATE/NAMING/STREAM
-        //    CONNECT exchange against the fuzz-controlled proxy. Dials are
-        //    fire-and-forget (the RPC returns before the net thread runs the
-        //    exchange); ordering no longer matters because connection k
-        //    deterministically claims lane k.
+        // Inbound mode: ThreadI2PAcceptIncoming is already looping
+        // StreamAccept/Accept on its own; installing the fuzz session above
+        // is all that is needed — the next `StreamAccept` connections hit
+        // `handle_fuzzed_conn`. We just wait for completions.
+        //
+        // Outbound mode: trigger one transient dial per lane.
+        #[cfg(not(feature = "i2p_inbound"))]
         for k in 0..n_lanes {
             let _ = self.node.node.client.call::<serde_json::Value>(
                 "addnode",
@@ -473,33 +634,24 @@ impl<'a> Scenario<'a, TestCase> for I2PSamScenario {
             );
         }
 
-        // 3. Wait for every proxy connection to finish serving its lane,
-        //    instead of sleeping. Each handler sends exactly one `()` when it
-        //    returns (script exhausted / promote socket closed / node hung
-        //    up). A bounded backstop avoids an indefinite wait if the node
-        //    decides not to dial at all for some lane (e.g. address parsing
-        //    rejected it) — that just means fewer connections than lanes.
-        //
-        //    NOTE: "proxy finished serving" precedes "node finished reacting
-        //    to the final reply" by a small, unbounded amount (the node still
-        //    runs its catch/Disconnect/CheckControlSock path). For a
-        //    crash/assert fuzzer this is fine: a fatal bug is still fatal a
-        //    moment later when is_alive runs, and Nyx hang-detection covers
-        //    infinite loops. There is no Bitcoin Core RPC/marker that blocks
-        //    on "I2P net thread is idle", so a bounded backstop is the
-        //    correct tool for the residual race, not a fixed sleep.
-        let backstop = Duration::from_secs(20);
+        // Wait for proxy connections to finish serving their lanes instead
+        // of sleeping. Each fuzzed connection signals once. Inbound mode's
+        // accept loop is continuous, so we additionally bound the whole wait
+        // by an overall deadline (a lane may also simply never be reached if
+        // the node tears the session down early).
+        let deadline = Instant::now() + COMPLETION_BACKSTOP;
         for _ in 0..n_lanes {
-            // recv_timeout returns Err on timeout *or* if all senders dropped
-            // (every connection finished and the Session Arc went away). Both
-            // mean "stop waiting".
-            if done_rx.recv_timeout(backstop).is_err() {
+            let now = Instant::now();
+            if now >= deadline {
                 break;
+            }
+            if done_rx.recv_timeout(deadline - now).is_err() {
+                break; // timeout, or all senders dropped
             }
         }
 
-        // 4. Detach the session so its sender(s) can drop and a late proxy
-        //    connection from this case can't bleed into the next reset.
+        // Detach so late connections from this case can't bleed into the
+        // next reset, and the sender(s) can drop.
         if let Ok(mut g) = self.slot.lock() {
             *g = None;
         }
