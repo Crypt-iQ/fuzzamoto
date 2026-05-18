@@ -336,7 +336,7 @@ impl I2PNode {
         conf.p2p = P2P::Yes;
 
         let i2psam = format!("-i2psam={sam_addr}");
-
+/*
         #[cfg(feature = "inherit_stdout")]
         {
             conf.args.extend_from_slice(&[
@@ -346,6 +346,7 @@ impl I2PNode {
             ]);
             conf.view_stdout = true;
         }
+*/
         conf.args.extend_from_slice(&[
             "-txreconciliation",
             "-peerbloomfilters",
