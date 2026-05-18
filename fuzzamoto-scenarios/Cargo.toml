@@ -39,6 +39,7 @@ fuzzamoto-nyx-sys = { path = "../fuzzamoto-nyx-sys", optional = true }
 
 bitcoin = "0.32.0"
 bitcoin_hashes = "0.16.0"
+corepc-node = { version = "0.10.0", features = ["29_0"] }
 io = { package = "bitcoin-io", version = "0.1.1" }
 env_logger = "0.11.6"
 log = "0.4.25"
@@ -75,3 +76,7 @@ path = "bin/rpc_generic.rs"
 [[bin]]
 name = "scenario-ir"
 path = "bin/ir.rs"
+
+[[bin]]
+name = "scenario-i2p"
+path = "bin/i2p.rs"
