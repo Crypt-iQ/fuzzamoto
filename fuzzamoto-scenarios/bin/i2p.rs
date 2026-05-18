@@ -503,16 +503,6 @@ impl I2PNode {
 
         let i2psam = format!("-i2psam={sam_addr}");
 
-        #[cfg(feature = "inherit_stdout")]
-        {
-            conf.args.extend_from_slice(&[
-                "-debug",
-                "-debugexclude=libevent",
-                "-debugexclude=leveldb",
-            ]);
-            conf.view_stdout = true;
-        }
-
         // Inbound mode enables ThreadI2PAcceptIncoming (the persistent
         // session + StreamAccept/Accept loop). Outbound mode disables it so
         // there is zero pre-snapshot SAM traffic.
