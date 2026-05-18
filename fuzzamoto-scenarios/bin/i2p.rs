@@ -97,7 +97,11 @@ const NO_TERM_LINGER: Duration = Duration::from_millis(150);
 
 /// Backstop for the per-case completion wait (see `run`). Real proxy
 /// connections arrive within tens of ms or not at all.
-const COMPLETION_BACKSTOP: Duration = Duration::from_secs(5);
+///const COMPLETION_BACKSTOP: Duration = Duration::from_secs(5);
+/// Backstop for the per-case completion wait (see `run`). Real proxy
+/// connections arrive within tens of ms or not at all, so this is kept
+/// well under AFL's 1000 ms dry-run limit.
+const COMPLETION_BACKSTOP: Duration = Duration::from_millis(400);
 
 // --------------------------------------------------------------------------
 // Fuzz input
@@ -177,7 +181,13 @@ impl<'a> ScenarioInput<'a> for TestCase {
             take(bytes, pos, 1).first().copied().unwrap_or(default)
         };
 
-        let n_lanes = (usize::from(byte(bytes, &mut pos, 1)) % 64) + 1;
+        //let n_lanes = (usize::from(byte(bytes, &mut pos, 1)) % 64) + 1;
+        // Cap at 1: each lane is one bitcoind connection attempt paced by
+        // the node's second-scale net-thread timers (mocktime does not
+        // accelerate them). >1 lane multiplies wall-clock without adding
+        // parser coverage and blows AFL's 1000 ms dry-run budget.
+        let _ = byte(bytes, &mut pos, 1); // keep wire format stable
+        let n_lanes = 1;
 
         let mut lanes: Vec<Vec<Reply>> = Vec::with_capacity(n_lanes);
         for _ in 0..n_lanes {
