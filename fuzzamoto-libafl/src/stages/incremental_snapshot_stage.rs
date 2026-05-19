@@ -89,10 +89,8 @@ where
         state: &mut S,
         manager: &mut EM,
     ) -> Result<(), Error> {
-        log::info!("begin of perform");
 
         if !self.enabled {
-            log::info!("not enabled");
             if self.inner_stage.should_restart(state)? {
                 self.inner_stage.perform(fuzzer, executor, state, manager)?;
             }
@@ -103,8 +101,6 @@ where
 
         // No incremental snapshot should exist at this point.
         assert!(!executor.helper.nyx_process.aux_tmp_snapshot_created());
-
-        log::info!("no snapshot yet");
 
         // Load input in case of eviction
         {
@@ -119,7 +115,6 @@ where
         };
 
         if program_len == 0 || state.rand_mut().coinflip(0.04) {
-            log::info!("fallback {program_len}");
             // Skip creating an incremental snapshot if we're using the empty program or
             // randomly decide to use the root.
             if self.inner_stage.should_restart(state)? {
@@ -139,7 +134,6 @@ where
         };
 
         if let Some(prefix_len) = new_prefix_len {
-            log::info!("pre-delete false option");
             executor
                 .helper
                 .nyx_process
@@ -156,7 +150,6 @@ where
             log::info!("Created incremental snapshot at position {prefix_len}");
 
             for reuse_count in 1..=self.max_reuse_count {
-                log::info!("reuse_cou {reuse_count}");
                 if reuse_count == self.max_reuse_count {
                     // Discard the incremental snapshot at the end of the last iteration.
                     // The inner mutational stage may not call run_target if the mutation
