@@ -12,6 +12,10 @@ pub struct IrInput {
     /// is injected here during execution.
     #[serde(skip)]
     pub frozen_prefix_len: Option<usize>,
+    /// Whether to send a program suffix. Used in incremental snapshots to limit
+    /// overhead.
+    #[serde(skip)]
+    pub send_suffix: Option<bool>,
 }
 
 impl Input for IrInput {}
@@ -21,6 +25,7 @@ impl IrInput {
         Self {
             ir,
             frozen_prefix_len: None,
+            send_suffix: None,
         }
     }
 
@@ -41,12 +46,24 @@ impl IrInput {
         Self {
             ir: program,
             frozen_prefix_len: None,
+            send_suffix: None,
         }
     }
 
     fn insert_snapshot(&self) -> Program {
         if let Some(prefix_len) = self.frozen_prefix_len {
+            log::info!("prefix: {prefix_len}");
+
             let mut instructions = self.ir.instructions.clone();
+
+            // If send_suffix exists and is true, only send the instructions after frozen_prefix_len
+            // and don't insert Operation::IncrementalSnapshot.
+            if let Some(send_suffix) = self.send_suffix {
+                if send_suffix {
+                    // If this doesn't work, try: let u: Vec<_> = instructions.drain()
+                    return Program::unchecked_new(self.ir.context.clone(), instructions[prefix_len..].to_vec());
+                }
+            }
 
             // Insert snapshot opcode at the frozen prefix position
             let snapshot_instr = Instruction {
@@ -59,6 +76,8 @@ impl IrInput {
 
             Program::unchecked_new(self.ir.context.clone(), instructions)
         } else {
+            log::info!("no prefix_len");
+            // TODO: Remove
             self.ir.clone()
         }
     }
@@ -96,7 +115,7 @@ impl HasTargetBytes for IrInput {
         {
             let mut bytes =
                 postcard::to_allocvec(&program).expect("serialization should never fail");
-            log::trace!("Input size: {}", bytes.len());
+            log::info!("Input size: {}", bytes.len());
             if bytes.len() > 1 * 1024 * 1024 {
                 bytes = Vec::new();
             }
