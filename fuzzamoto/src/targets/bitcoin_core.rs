@@ -72,7 +72,7 @@ impl BitcoinCoreTarget {
             "-maxmempool=5", // 5MB
             "-dbcache=4",    // 4MiB
             "-datacarriersize=1000000",
-            "-peertimeout=31556952000",
+            "-peertimeout=999999999",
             "-noconnect",
         ]);
         config
