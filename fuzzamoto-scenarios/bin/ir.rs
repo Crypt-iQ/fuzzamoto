@@ -78,6 +78,7 @@ pub fn nyx_print(bytes: &[u8]) {
 
 pub struct TestCase {
     program: CompiledProgram,
+    prefix: Option<Compiler>,
 }
 
 fn probe_result_mapper(
@@ -128,14 +129,40 @@ fn probe_result_mapper(
 
 impl<'a> ScenarioInput<'a> for TestCase {
     fn decode(bytes: &'a [u8]) -> Result<Self, String> {
-        let program = if cfg!(feature = "compile_in_vm") {
+        let compiled_program: CompiledProgram;
+        let prefix: Option<Compiler>;
+        // TODO: compile_in_vm && incremental_snapshots, can do rt flag to use compiler.compile when unset?
+        if cfg!(feature = "compile_in_vm") {
+            nyx_print("pre-compile".as_bytes());
             let program: Program = postcard::from_bytes(bytes).map_err(|e| e.to_string())?;
             let mut compiler = Compiler::new();
-            compiler.compile(&program).map_err(|e| e.to_string())?
+            let mut result = compiler.compile(&program).map_err(|e| e.to_string())?;
+            compiled_program = result.0;
+            if let Some(ref mut p) = result.1 {
+                nyx_print("pre-clear_actions".as_bytes());
+                p.clear_actions(); // TODO: Does this work to avoid `start_index`?
+            }
+            prefix = result.1;
+            nyx_print("post-compile".as_bytes());
         } else {
-            postcard::from_bytes(bytes).map_err(|e| e.to_string())?
-        };
-        Ok(Self { program })
+            compiled_program = postcard::from_bytes(bytes).map_err(|e| e.to_string())?;
+            prefix = None;
+        }
+        Ok(Self { program: compiled_program, prefix: prefix })
+    }
+}
+
+impl TestCase {
+    // TODO: Figure out return values
+    fn decode_with_suffix(prefix: &mut Compiler, bytes: &[u8]) -> Result<TestCase, String> {
+        if cfg!(feature = "compile_in_vm") {
+            nyx_print("pre-decode_with_suffix".as_bytes());
+            let suffix: Program = postcard::from_bytes(bytes).map_err(|e| e.to_string())?;
+            let result = prefix.compile(&suffix).map_err(|e| e.to_string())?;
+            return Ok(TestCase { program: result.0, prefix: None });
+        } else {
+            return Err("compile_in_vm disabled".to_string());
+        }
     }
 }
 
@@ -276,13 +303,13 @@ where
 
     fn process_actions(
         &mut self,
-        program: CompiledProgram,
-        start_index: usize,
+        mut program: CompiledProgram,
         runner: &dyn Runner,
     ) -> Option<(Vec<u8>, usize)> {
         let message_filter = |(s, _): &(String, Vec<u8>)| ["getblocktxn"].contains(&s.as_str());
         let mut non_probe_action_count = 0;
-        for (i, action) in program.actions.into_iter().enumerate().skip(start_index) {
+        // TODO: Remove skip, decode_with_suffix should only return the suffix CompiledProgram: -> actions.drain(..)?
+        for action in program.actions.drain(..) {
             match action {
                 CompiledAction::Connect(_node, connection_type) => {
                     let conn_type = match connection_type.as_str() {
@@ -385,7 +412,9 @@ where
                 CompiledAction::IncrementalSnapshot => {
                     // If we're creating a new incremental snapshot, we want to save the index to skip
                     // ahead to.
-                    let prefix_index = i + 1;
+                    //non_probe_action_count += 1; // TODO: Could clean this up, unnecessary
+                    //let prefix_index = i + 1;
+                    let prefix_index = 1; // TODO: Remove, this shouldn't matter, only left to compile
                     let (new_payload, action_pos) =
                         runner.create_incremental_and_next(prefix_index);
                     return Some((new_payload, action_pos));
@@ -528,14 +557,27 @@ where
     }
 
     fn run(&mut self, testcase: TestCase, runner: &dyn Runner) -> ScenarioResult {
-        let metadata = testcase.program.metadata.clone();
-        let mut program = testcase.program;
-        let mut start_index = 0;
+        nyx_print("pre-run".as_bytes());
 
-        while let Some((new_payload, action_pos)) =
-            self.process_actions(program, start_index, runner)
+        let metadata = testcase.program.metadata.clone();
+        let mut prefix = testcase.prefix;
+        let mut program = testcase.program;
+        let _start_index = 0;
+
+        while let Some((new_payload, _action_pos)) =
+            self.process_actions(program, runner)
         {
-            let new_testcase = match TestCase::decode(&new_payload) {
+            nyx_print("inner-process_actions".as_bytes());
+            let prefix = match prefix.as_mut() {
+                Some(p) => p,
+                None => {
+                    log::warn!("No prefix compiler with incremental snapshots");
+                    runner.skip();
+                    return ScenarioResult::Skip;
+                }
+            };
+
+            let new_testcase = match TestCase::decode_with_suffix(prefix, &new_payload) {
                 Ok(tc) => tc,
                 Err(e) => {
                     log::warn!(
@@ -548,8 +590,9 @@ where
 
             // Resume just after the snapshot prefix.
             program = new_testcase.program;
-            start_index = action_pos;
         }
+
+        nyx_print("post-process_actions".as_bytes());
 
         self.ping_connections();
 

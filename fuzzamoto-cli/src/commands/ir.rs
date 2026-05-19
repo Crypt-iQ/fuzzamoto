@@ -228,7 +228,7 @@ fn compile_ir_file(input: &PathBuf, output: &PathBuf) -> Result<()> {
     let mut compiler = Compiler::new();
     let compiled = compiler.compile(&program).unwrap();
 
-    let bytes = postcard::to_allocvec(&compiled)?;
+    let bytes = postcard::to_allocvec(&compiled.0)?;
     std::fs::write(output, &bytes)?;
 
     Ok(())
@@ -458,7 +458,7 @@ pub fn analyze_ir(input: &Path) -> Result<()> {
                 if let Ok(compiled) = compiler.compile(&program) {
                     // Count total sends in this program
                     let sends = compiled
-                        .actions
+                        .0.actions
                         .iter()
                         .filter(|action| {
                             matches!(
@@ -474,7 +474,7 @@ pub fn analyze_ir(input: &Path) -> Result<()> {
                     sends_per_program_hist[sends] += 1;
 
                     // Get compiled size
-                    let compiled_bytes = postcard::to_allocvec(&compiled)?;
+                    let compiled_bytes = postcard::to_allocvec(&compiled.0)?;
                     let compiled_size = compiled_bytes.len();
                     let bucket = compiled_size / COMPILED_BUCKET_SIZE;
                     compiled_size_hist.resize(compiled_size_hist.len().max(bucket + 1), 0);

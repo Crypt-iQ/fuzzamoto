@@ -102,7 +102,7 @@ impl HasTargetBytes for IrInput {
                 .expect("Compilation should never fail");
 
             let mut bytes =
-                postcard::to_allocvec(&compiled_input).expect("serialization should never fail");
+                postcard::to_allocvec(&compiled_input.0).expect("serialization should never fail");
             log::trace!("Compiled input size: {}", bytes.len());
             if bytes.len() > 8 * 1024 * 1024 {
                 bytes = Vec::new();

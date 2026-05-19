@@ -57,6 +57,7 @@ impl Clone for Box<dyn AnyClone> {
 
 /// `Compiler` is responsible for compiling IR into a sequence of low-level actions to be performed
 /// on a node (i.e. mapping `fuzzamoto_ir::Program` -> `CompiledProgram`).
+#[derive(Clone)]
 pub struct Compiler {
     secp_ctx: Secp256k1<bitcoin::secp256k1::All>,
 
@@ -182,7 +183,7 @@ impl std::fmt::Display for CompilerError {
     }
 }
 
-pub type CompilerResult = Result<CompiledProgram, CompilerError>;
+pub type CompilerResult = Result<(CompiledProgram, Option<Compiler>), CompilerError>;
 
 #[derive(Clone, Debug)]
 struct Scripts {
@@ -327,6 +328,10 @@ impl Default for Compiler {
 }
 
 impl Compiler {
+    pub fn clear_actions(&mut self) {
+        self.output.actions.clear();
+    }
+
     pub fn compile(&mut self, ir: &Program) -> CompilerResult {
         let probing_insts = ir
             .instructions
@@ -342,7 +347,23 @@ impl Compiler {
             ));
         }
 
-        self.connection_counter = ir.context.num_connections;
+        let mut prefix: Option<Compiler> = None;
+
+/*
+        // NOTE: Nice for assertion, unnecessary
+        let snapshot_insts = ir
+            .instructions
+            .iter()
+            .filter(|inst| matches!(inst.operation, Operation::IncrementalSnapshot))
+            .count();
+        assert!(snapshot_insts <= 1);
+        let has_incremental = snapshot_insts > 0;
+*/
+
+        // If we're compiling a suffix program, this may already exist.
+        if self.connection_counter == 0 {
+            self.connection_counter = ir.context.num_connections;
+        }
 
         for instruction in &ir.instructions {
             let actions_before = self
@@ -423,6 +444,10 @@ impl Compiler {
                     self.output
                         .actions
                         .push(CompiledAction::IncrementalSnapshot);
+
+                    // clone() is ugly, but should only be called once (first run)
+                    assert!(prefix.is_none());
+                    prefix = Some(self.clone());
                 }
 
                 Operation::BeginWitnessStack
@@ -534,7 +559,7 @@ impl Compiler {
             }
         }
 
-        Ok(self.output.clone()) // TODO: do not clone
+        Ok((self.output.clone(), prefix)) // TODO: do not clone
     }
 
     #[must_use]
