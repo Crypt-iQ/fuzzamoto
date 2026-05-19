@@ -52,8 +52,6 @@ impl IrInput {
 
     fn insert_snapshot(&self) -> Program {
         if let Some(prefix_len) = self.frozen_prefix_len {
-            log::info!("prefix: {prefix_len}");
-
             let mut instructions = self.ir.instructions.clone();
 
             // If send_suffix exists and is true, only send the instructions after frozen_prefix_len
@@ -76,7 +74,6 @@ impl IrInput {
 
             Program::unchecked_new(self.ir.context.clone(), instructions)
         } else {
-            log::info!("no prefix_len");
             // TODO: Remove
             self.ir.clone()
         }
@@ -115,7 +112,7 @@ impl HasTargetBytes for IrInput {
         {
             let mut bytes =
                 postcard::to_allocvec(&program).expect("serialization should never fail");
-            log::info!("Input size: {}", bytes.len());
+            log::trace!("Input size: {}", bytes.len());
             if bytes.len() > 1 * 1024 * 1024 {
                 bytes = Vec::new();
             }

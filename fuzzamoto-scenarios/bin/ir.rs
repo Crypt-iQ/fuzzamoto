@@ -133,17 +133,14 @@ impl<'a> ScenarioInput<'a> for TestCase {
         let prefix: Option<Compiler>;
         // TODO: compile_in_vm && incremental_snapshots, can do rt flag to use compiler.compile when unset?
         if cfg!(feature = "compile_in_vm") {
-            nyx_print("pre-compile".as_bytes());
             let program: Program = postcard::from_bytes(bytes).map_err(|e| e.to_string())?;
             let mut compiler = Compiler::new();
             let mut result = compiler.compile(&program).map_err(|e| e.to_string())?;
             compiled_program = result.0;
             if let Some(ref mut p) = result.1 {
-                nyx_print("pre-clear_actions".as_bytes());
                 p.clear_actions(); // TODO: Does this work to avoid `start_index`?
             }
             prefix = result.1;
-            nyx_print("post-compile".as_bytes());
         } else {
             compiled_program = postcard::from_bytes(bytes).map_err(|e| e.to_string())?;
             prefix = None;
@@ -156,7 +153,6 @@ impl TestCase {
     // TODO: Figure out return values
     fn decode_with_suffix(prefix: &mut Compiler, bytes: &[u8]) -> Result<TestCase, String> {
         if cfg!(feature = "compile_in_vm") {
-            nyx_print("pre-decode_with_suffix".as_bytes());
             let suffix: Program = postcard::from_bytes(bytes).map_err(|e| e.to_string())?;
             let result = prefix.compile(&suffix).map_err(|e| e.to_string())?;
             return Ok(TestCase { program: result.0, prefix: None });
@@ -557,8 +553,6 @@ where
     }
 
     fn run(&mut self, testcase: TestCase, runner: &dyn Runner) -> ScenarioResult {
-        nyx_print("pre-run".as_bytes());
-
         let metadata = testcase.program.metadata.clone();
         let mut prefix = testcase.prefix;
         let mut program = testcase.program;
@@ -567,7 +561,6 @@ where
         while let Some((new_payload, _action_pos)) =
             self.process_actions(program, runner)
         {
-            nyx_print("inner-process_actions".as_bytes());
             let prefix = match prefix.as_mut() {
                 Some(p) => p,
                 None => {
@@ -591,8 +584,6 @@ where
             // Resume just after the snapshot prefix.
             program = new_testcase.program;
         }
-
-        nyx_print("post-process_actions".as_bytes());
 
         self.ping_connections();
 
