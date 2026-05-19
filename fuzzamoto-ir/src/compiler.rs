@@ -51,7 +51,7 @@ impl<T: Any + Clone> AnyClone for T {
 
 impl Clone for Box<dyn AnyClone> {
     fn clone(&self) -> Self {
-        self.clone_box()
+        (**self).clone_box()
     }
 }
 
@@ -1893,8 +1893,7 @@ impl Compiler {
             .variables
             .get(index)
             .ok_or(CompilerError::VariableNotFound)?;
-        let var = var
-            .as_any()
+        let var = (**var).as_any()
             .downcast_ref::<T>()
             .ok_or(CompilerError::IncorrectVariableType)?;
         Ok(var)
@@ -1923,8 +1922,7 @@ impl Compiler {
             .variables
             .get_mut(*var_index)
             .ok_or(CompilerError::VariableNotFound)?;
-        let var = var
-            .as_any_mut()
+        let var = (**var).as_any_mut()
             .downcast_mut::<T>()
             .ok_or(CompilerError::IncorrectVariableType)?;
         Ok(var)
