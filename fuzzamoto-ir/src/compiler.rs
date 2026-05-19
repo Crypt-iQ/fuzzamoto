@@ -35,12 +35,32 @@ use crate::{
     TaprootSpendInfo, bloom::filter_insert, generators::block::Header,
 };
 
+pub trait AnyClone: Any {
+    fn clone_box(&self) -> Box<dyn AnyClone>;
+    fn as_any(&self) -> &dyn Any;
+    fn as_any_mut(&mut self) -> &mut dyn Any;
+}
+
+impl<T: Any + Clone> AnyClone for T {
+    fn clone_box(&self) -> Box<dyn AnyClone> {
+        Box::new(self.clone())
+    }
+    fn as_any(&self) -> &dyn Any { self }
+    fn as_any_mut(&mut self) -> &mut dyn Any { self }
+}
+
+impl Clone for Box<dyn AnyClone> {
+    fn clone(&self) -> Self {
+        self.clone_box()
+    }
+}
+
 /// `Compiler` is responsible for compiling IR into a sequence of low-level actions to be performed
 /// on a node (i.e. mapping `fuzzamoto_ir::Program` -> `CompiledProgram`).
 pub struct Compiler {
     secp_ctx: Secp256k1<bitcoin::secp256k1::All>,
 
-    variables: Vec<Box<dyn Any>>,
+    variables: Vec<Box<dyn AnyClone>>,
     output: CompiledProgram,
     connection_counter: usize,
 }
@@ -297,6 +317,7 @@ struct HandshakeOpts {
     erlay: bool,
 }
 
+#[derive(Clone)]
 struct Nop;
 
 impl Default for Compiler {
@@ -542,7 +563,7 @@ impl Compiler {
             .or_insert(connection_var_index);
     }
 
-    fn handle_load_operation<T: 'static>(&mut self, value: T) {
+    fn handle_load_operation<T: 'static + Clone>(&mut self, value: T) {
         self.append_variable(value);
     }
 
@@ -1848,6 +1869,7 @@ impl Compiler {
             .get(index)
             .ok_or(CompilerError::VariableNotFound)?;
         let var = var
+            .as_any()
             .downcast_ref::<T>()
             .ok_or(CompilerError::IncorrectVariableType)?;
         Ok(var)
@@ -1877,12 +1899,13 @@ impl Compiler {
             .get_mut(*var_index)
             .ok_or(CompilerError::VariableNotFound)?;
         let var = var
+            .as_any_mut()
             .downcast_mut::<T>()
             .ok_or(CompilerError::IncorrectVariableType)?;
         Ok(var)
     }
 
-    fn append_variable<T: 'static>(&mut self, value: T) {
+    fn append_variable<T: 'static + Clone>(&mut self, value: T) {
         self.output
             .metadata
             .variable_indices
