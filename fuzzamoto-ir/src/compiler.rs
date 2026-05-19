@@ -57,7 +57,6 @@ impl Clone for Box<dyn AnyClone> {
 
 /// `Compiler` is responsible for compiling IR into a sequence of low-level actions to be performed
 /// on a node (i.e. mapping `fuzzamoto_ir::Program` -> `CompiledProgram`).
-#[derive(Clone)]
 pub struct Compiler {
     secp_ctx: Secp256k1<bitcoin::secp256k1::All>,
 
@@ -324,6 +323,17 @@ struct Nop;
 impl Default for Compiler {
     fn default() -> Self {
         Self::new()
+    }
+}
+
+impl Clone for Compiler {
+    fn clone(&self) -> Self {
+        Compiler {
+            secp_ctx: Secp256k1::new(),
+            variables: self.variables.clone(),
+            output: self.output.clone(),
+            connection_counter: self.connection_counter,
+        }
     }
 }
 
