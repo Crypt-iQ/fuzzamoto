@@ -1,4 +1,4 @@
-use std::{fs::File, hash::Hash, io::Read, path::PathBuf};
+use std::{borrow::Cow, fs::File, hash::Hash, io::Read, path::PathBuf};
 
 use fuzzamoto_ir::{Instruction, Operation, Program};
 
@@ -44,7 +44,7 @@ impl IrInput {
         }
     }
 
-    fn insert_snapshot(&self) -> Program {
+    fn insert_snapshot(&self) -> Cow<'_, Program> {
         if let Some(prefix_len) = self.frozen_prefix_len {
             let mut instructions = self.ir.instructions.clone();
 
@@ -57,9 +57,9 @@ impl IrInput {
             let insert_pos = prefix_len.min(instructions.len());
             instructions.insert(insert_pos, snapshot_instr);
 
-            Program::unchecked_new(self.ir.context.clone(), instructions)
+            Cow::Owned(Program::unchecked_new(self.ir.context.clone(), instructions))
         } else {
-            self.ir.clone()
+            Cow::Borrowed(&self.ir)
         }
     }
 }
@@ -79,7 +79,7 @@ impl HasTargetBytes for IrInput {
             let mut compiler = fuzzamoto_ir::compiler::Compiler::new();
 
             let compiled_input = compiler
-                .compile(&program)
+                .compile(&program.as_ref())
                 .expect("Compilation should never fail");
 
             let mut bytes =
@@ -95,7 +95,7 @@ impl HasTargetBytes for IrInput {
         #[cfg(feature = "compile_in_vm")]
         {
             let mut bytes =
-                postcard::to_allocvec(&program).expect("serialization should never fail");
+                postcard::to_allocvec(&program.as_ref()).expect("serialization should never fail");
             log::trace!("Input size: {}", bytes.len());
             if bytes.len() > 1 * 1024 * 1024 {
                 bytes = Vec::new();
