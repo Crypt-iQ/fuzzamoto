@@ -17,7 +17,7 @@ use libafl_bolts::{
 };
 use rand::RngCore;
 
-use crate::{input::IrInput, stages::RuntimeMetadata};
+use crate::{input::IrInput};
 
 /// Instruction limit for mutated IR programs
 const MAX_INSTRUCTIONS: usize = 4096;
@@ -58,7 +58,7 @@ where
     R: RngCore,
     M: fuzzamoto_ir::Mutator<R>,
 {
-    fn mutate(&mut self, state: &mut S, input: &mut IrInput) -> Result<MutationResult, Error> {
+    fn mutate(&mut self, _state: &mut S, input: &mut IrInput) -> Result<MutationResult, Error> {
         //let current_id = *state.corpus().current();
 /*
         let rt_data = runtime_metadata_mut(state);
@@ -211,7 +211,7 @@ where
     R: RngCore,
     G: fuzzamoto_ir::Generator<R>,
 {
-    fn mutate(&mut self, state: &mut S, input: &mut IrInput) -> Result<MutationResult, Error> {
+    fn mutate(&mut self, _state: &mut S, input: &mut IrInput) -> Result<MutationResult, Error> {
         //let current_id = *state.corpus().current();
 /*
         let rt_data = runtime_metadata_mut(state);

@@ -1,9 +1,9 @@
 use crate::input::IrInput;
-use fuzzamoto_ir::{ProbeResult, ProbeResults};
+use core::marker::PhantomData;
 use libafl::ExecutesInput;
 use libafl::{
     HasMetadata,
-    corpus::{Corpus, CorpusId},
+    corpus::{CorpusId},
     executors::{Executor, HasObservers},
     observers::{ObserversTuple, StdOutObserver},
     stages::{
@@ -19,13 +19,14 @@ use serde::{Deserialize, Serialize};
 pub struct ProbingStage<T> {
     //seen: HashSet<CorpusId>,
     //handle: Handle<T>,
+    phantom: PhantomData<T>
 }
 
 impl<T> ProbingStage<T> {
-    pub fn new(observer_handle: &Handle<T>) -> Self {
+    pub fn new(_observer_handle: &Handle<T>) -> Self {
         Self {
-            seen: HashSet::new(),
-            handle: observer_handle.clone(),
+            //seen: HashSet::new(),
+            //handle: observer_handle.clone(),
         }
     }
 }
