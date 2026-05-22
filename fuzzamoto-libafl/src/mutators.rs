@@ -75,7 +75,7 @@ where
         };
 */
 
-        let tc_data = None;
+        let tc_data : Option<&mut fuzzamoto_ir::PerTestcaseMetadata> = None;
 
         Ok(
             match self
@@ -89,7 +89,7 @@ where
     }
 
     #[inline]
-    fn post_exec(&mut self, state: &mut S, _new_corpus_id: Option<CorpusId>) -> Result<(), Error> {
+    fn post_exec(&mut self, _state: &mut S, _new_corpus_id: Option<CorpusId>) -> Result<(), Error> {
         //let rt_data = runtime_metadata_mut(state);
         //rt_data.reset_idx();
 
@@ -170,7 +170,7 @@ where
     }
 
     #[inline]
-    fn post_exec(&mut self, state: &mut S, _new_corpus_id: Option<CorpusId>) -> Result<(), Error> {
+    fn post_exec(&mut self, _state: &mut S, _new_corpus_id: Option<CorpusId>) -> Result<(), Error> {
         //let rt_data = runtime_metadata_mut(state);
         //rt_data.reset_idx();
 
@@ -227,7 +227,7 @@ where
             None
         };
 */
-        let tc_data = None;
+        let tc_data : Option<&mut fuzzamoto_ir::PerTestcaseMetadata> = None;
 
         let Some(index) =
             self.generator
@@ -279,7 +279,7 @@ where
     }
 
     #[inline]
-    fn post_exec(&mut self, state: &mut S, _new_corpus_id: Option<CorpusId>) -> Result<(), Error> {
+    fn post_exec(&mut self, _state: &mut S, _new_corpus_id: Option<CorpusId>) -> Result<(), Error> {
         //let rt_data = runtime_metadata_mut(state);
         //rt_data.reset_idx();
 

@@ -1,5 +1,4 @@
 use crate::input::IrInput;
-use fuzzamoto_ir::{Instruction, Operation};
 use fuzzamoto_ir::{ProbeResult, ProbeResults};
 use libafl::ExecutesInput;
 use libafl::{
@@ -9,14 +8,12 @@ use libafl::{
     observers::{ObserversTuple, StdOutObserver},
     stages::{
         Restartable, Stage,
-        mutational::{MutatedTransform, MutatedTransformPost},
     },
     state::{HasCorpus, HasCurrentTestcase},
 };
 use libafl_bolts::{impl_serdeany, tuples::Handle};
 use std::collections::{HashMap, HashSet};
 
-use base64::prelude::{BASE64_STANDARD, Engine};
 use serde::{Deserialize, Serialize};
 
 pub struct ProbingStage<T> {
@@ -103,10 +100,10 @@ where
 {
     fn perform(
         &mut self,
-        fuzzer: &mut Z,
-        executor: &mut E,
-        state: &mut S,
-        manager: &mut EM,
+        _fuzzer: &mut Z,
+        _executor: &mut E,
+        _state: &mut S,
+        _manager: &mut EM,
     ) -> Result<(), libafl::Error> {
         Ok(())
 /*
