@@ -108,6 +108,8 @@ where
         state: &mut S,
         manager: &mut EM,
     ) -> Result<(), libafl::Error> {
+        Ok(())
+/*
         if !state.has_metadata::<RuntimeMetadata>() {
             state.add_metadata(RuntimeMetadata::default());
         }
@@ -182,6 +184,7 @@ where
         log::info!("Done Probing for testcase {cur:?}");
         self.seen.insert(cur);
         Ok(())
+*/
     }
 }
 

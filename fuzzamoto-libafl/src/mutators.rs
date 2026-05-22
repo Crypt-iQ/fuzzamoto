@@ -60,7 +60,7 @@ where
 {
     fn mutate(&mut self, state: &mut S, input: &mut IrInput) -> Result<MutationResult, Error> {
         let current_id = *state.corpus().current();
-
+/*
         let rt_data = runtime_metadata_mut(state);
         let is_first = rt_data.mutation_idx() == 0;
         rt_data.increment_idx();
@@ -73,6 +73,9 @@ where
         } else {
             None
         };
+*/
+
+        let tc_data = None;
 
         Ok(
             match self
@@ -87,8 +90,8 @@ where
 
     #[inline]
     fn post_exec(&mut self, state: &mut S, _new_corpus_id: Option<CorpusId>) -> Result<(), Error> {
-        let rt_data = runtime_metadata_mut(state);
-        rt_data.reset_idx();
+        //let rt_data = runtime_metadata_mut(state);
+        //rt_data.reset_idx();
 
         Ok(())
     }
@@ -137,8 +140,8 @@ where
             return Ok(MutationResult::Skipped);
         }
 
-        let rt_data = runtime_metadata_mut(state);
-        rt_data.increment_idx();
+        //let rt_data = runtime_metadata_mut(state);
+        //rt_data.increment_idx();
 
         let mut other_testcase = state.corpus().get_from_all(id)?.borrow_mut();
         if other_testcase.scheduled_count() == 0 {
@@ -168,8 +171,8 @@ where
 
     #[inline]
     fn post_exec(&mut self, state: &mut S, _new_corpus_id: Option<CorpusId>) -> Result<(), Error> {
-        let rt_data = runtime_metadata_mut(state);
-        rt_data.reset_idx();
+        //let rt_data = runtime_metadata_mut(state);
+        //rt_data.reset_idx();
 
         Ok(())
     }
@@ -210,7 +213,7 @@ where
 {
     fn mutate(&mut self, state: &mut S, input: &mut IrInput) -> Result<MutationResult, Error> {
         let current_id = *state.corpus().current();
-
+/*
         let rt_data = runtime_metadata_mut(state);
         let is_first = rt_data.mutation_idx() == 0;
         rt_data.increment_idx();
@@ -223,6 +226,8 @@ where
         } else {
             None
         };
+*/
+        let tc_data = None;
 
         let Some(index) =
             self.generator
@@ -275,8 +280,8 @@ where
 
     #[inline]
     fn post_exec(&mut self, state: &mut S, _new_corpus_id: Option<CorpusId>) -> Result<(), Error> {
-        let rt_data = runtime_metadata_mut(state);
-        rt_data.reset_idx();
+        //let rt_data = runtime_metadata_mut(state);
+        //rt_data.reset_idx();
 
         Ok(())
     }
