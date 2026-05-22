@@ -42,7 +42,7 @@ where
         }
     }
 }
-
+/*
 pub fn runtime_metadata_mut<S>(state: &mut S) -> &mut RuntimeMetadata
 where
     S: HasMetadata,
@@ -51,7 +51,7 @@ where
         .metadata_mut::<RuntimeMetadata>()
         .expect("RuntimeMetadata should always exist at this point")) as _
 }
-
+*/
 impl<S, M, R> Mutator<IrInput, S> for IrMutator<M, R>
 where
     S: HasRand + HasMetadata + HasCorpus<IrInput>,
@@ -59,7 +59,7 @@ where
     M: fuzzamoto_ir::Mutator<R>,
 {
     fn mutate(&mut self, state: &mut S, input: &mut IrInput) -> Result<MutationResult, Error> {
-        let current_id = *state.corpus().current();
+        //let current_id = *state.corpus().current();
 /*
         let rt_data = runtime_metadata_mut(state);
         let is_first = rt_data.mutation_idx() == 0;
@@ -212,7 +212,7 @@ where
     G: fuzzamoto_ir::Generator<R>,
 {
     fn mutate(&mut self, state: &mut S, input: &mut IrInput) -> Result<MutationResult, Error> {
-        let current_id = *state.corpus().current();
+        //let current_id = *state.corpus().current();
 /*
         let rt_data = runtime_metadata_mut(state);
         let is_first = rt_data.mutation_idx() == 0;

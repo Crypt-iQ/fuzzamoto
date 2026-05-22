@@ -17,8 +17,8 @@ use std::collections::{HashMap, HashSet};
 use serde::{Deserialize, Serialize};
 
 pub struct ProbingStage<T> {
-    seen: HashSet<CorpusId>,
-    handle: Handle<T>,
+    //seen: HashSet<CorpusId>,
+    //handle: Handle<T>,
 }
 
 impl<T> ProbingStage<T> {
@@ -39,7 +39,7 @@ pub struct RuntimeMetadata {
 }
 
 impl RuntimeMetadata {
-    pub fn metadata_mut(&mut self, id: CorpusId) -> Option<&mut fuzzamoto_ir::PerTestcaseMetadata> {
+    /*pub fn metadata_mut(&mut self, id: CorpusId) -> Option<&mut fuzzamoto_ir::PerTestcaseMetadata> {
         self.metadatas.get_mut(&id)
     }
 
@@ -53,13 +53,13 @@ impl RuntimeMetadata {
 
     pub fn mutation_idx(&self) -> usize {
         self.mutation_idx
-    }
+    }*/
 }
 
 impl_serdeany!(RuntimeMetadata);
 
 /// Parse the incoming message from the other peer and process it
-pub fn process_probe_results<S>(state: &mut S, results: &ProbeResults)
+/*pub fn process_probe_results<S>(state: &mut S, results: &ProbeResults)
 where
     S: HasMetadata + HasCorpus<IrInput>,
 {
@@ -88,7 +88,7 @@ where
             }
         }
     }
-}
+}*/
 
 impl<E, EM, OT, S, T, Z> Stage<E, EM, S, Z> for ProbingStage<T>
 where
