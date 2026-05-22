@@ -12,7 +12,7 @@ use libafl::{
     state::{HasCorpus, HasCurrentTestcase},
 };
 use libafl_bolts::{impl_serdeany, tuples::Handle};
-use std::collections::{HashMap, HashSet};
+use std::collections::{HashMap};
 
 use serde::{Deserialize, Serialize};
 
@@ -27,6 +27,7 @@ impl<T> ProbingStage<T> {
         Self {
             //seen: HashSet::new(),
             //handle: observer_handle.clone(),
+            phantom: PhantomData,
         }
     }
 }
