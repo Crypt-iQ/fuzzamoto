@@ -167,6 +167,7 @@ where
         let assertion_feedback_enabled = self
             .options
             .assertion_feedback_enabled(self.client_description.core_id());
+        println!("assertion feedback: {}", assertion_feedback_enabled);
         let coverage_feedback_enabled = !assertion_feedback_enabled;
 
         // Feedback to rate the interestingness of an input
