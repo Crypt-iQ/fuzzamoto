@@ -167,7 +167,7 @@ fn build_tx<R: RngCore>(
             builder.force_append_expect_output(vec![], &Operation::LoadSequence(0xffff_ffff));
         builder.force_append(
             vec![mut_inputs_var.index, *funding_txo, sequence_var.index],
-            Operation::AddTxInput,
+            &Operation::AddTxInput,
         );
     }
 
@@ -249,26 +249,26 @@ where
                 rng.gen_range(5000..100_000_000),
                 get_random_output_type(rng),
             );
-            let (const_tx_var, _) = build_tx(builder, rng, &[txo], tx_version, &[amount])?;
+            let (const_tx_var, _) = build_tx(builder, rng, &[txo], tx_version, &[amount]);
 
             let conn_var = builder.get_or_create_random_connection(rng);
 
             let mut_inventory_var =
-                builder.force_append_expect_output(vec![], Operation::BeginBuildInventory);
+                builder.force_append_expect_output(vec![], &Operation::BeginBuildInventory);
             builder.force_append(
                 vec![mut_inventory_var.index, const_tx_var.index],
-                Operation::AddWtxidInv,
+                &Operation::AddWtxidInv,
             );
             let const_inventory_var = builder.force_append_expect_output(
                 vec![mut_inventory_var.index],
-                Operation::EndBuildInventory,
+                &Operation::EndBuildInventory,
             );
 
             builder.force_append(
                 vec![conn_var.index, const_inventory_var.index],
-                Operation::SendInv,
+                &Operation::SendInv,
             );
-            builder.force_append(vec![conn_var.index, const_tx_var.index], Operation::SendTx);
+            builder.force_append(vec![conn_var.index, const_tx_var.index], &Operation::SendTx);
 
             Ok(())
         } else {
@@ -297,7 +297,7 @@ where
             meta.txo_metadata_mut().choice = Some(*idx);
             program.get_random_instruction_index_from(
                 rng,
-                <Self as Generator<R>>::requested_context(self),
+                &<Self as Generator<R>>::requested_context(self),
                 inst + 1,
             )
         } else {
@@ -371,7 +371,7 @@ impl<R: RngCore> Generator<R> for SingleTxGenerator {
             amounts
         };
         let (const_tx_var, _) =
-            build_tx_from_txos(builder, rng, &funding_txos, tx_version, &output_amounts)?;
+            build_tx_from_txos(builder, rng, &funding_txos, tx_version, &output_amounts);
 
         if rng.gen_bool(0.5) {
             let conn_var = builder.get_or_create_random_connection(rng);
@@ -427,7 +427,7 @@ impl<R: RngCore> Generator<R> for OneParentOneChildGenerator {
                 (100_000_000, OutputType::PayToWitnessScriptHash),
                 (10000, OutputType::PayToAnchor),
             ],
-        )?;
+        );
         let (child_tx_var, _) = build_tx_from_txos(
             builder,
             rng,
