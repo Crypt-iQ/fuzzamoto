@@ -80,7 +80,7 @@ pub type InstructionIndex = usize;
 
 pub type ConnectionId = usize;
 
-#[derive(Default)]
+#[derive(serde::Serialize, serde::Deserialize, Debug, Default, Clone)]
 pub struct TxoInfo {
     pub used_txos: Vec<VariableIndex>,
     pub created_txos: Vec<VariableIndex>,

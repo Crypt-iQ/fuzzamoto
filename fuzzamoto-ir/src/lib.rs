@@ -338,7 +338,8 @@ pub struct TxoMetadata {
 impl Default for TxoMetadata {
     fn default() -> Self {
         Self {
-            txos: Vec::new(),
+            used_txos: Vec::new(),
+            created_txos: Vec::new(),
         }
     }
 }
@@ -349,7 +350,7 @@ pub enum ProbeResult {
         get_block_txn: GetBlockTxn,
     },
     MempoolInvalid {
-        used_txos: Vec<usize>
+        used_txos: Vec<usize>,
         created_txos: Vec<usize>,
     },
     Failure {
