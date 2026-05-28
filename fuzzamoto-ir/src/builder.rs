@@ -644,7 +644,6 @@ impl ProgramBuilder {
                     utxos.insert(var_count);
                 }
                 Operation::AddTxInput => {
-                    //
                     if !utxos.remove(&instruction.inputs[1]) {
                         continue;
                     }
@@ -660,7 +659,7 @@ impl ProgramBuilder {
 
         // used_txos added back to utxos, not perfect since could be
         // consumed by one valid, one invalid tx
-        utxos.extend(used_txos.iter().copied());
+        utxos.extend(used_txos.iter().copied().filter(|i| *i < self.variables.len()));
 
         // remove all created_txos from utxos, this includes any added
         // above from used_txos.
