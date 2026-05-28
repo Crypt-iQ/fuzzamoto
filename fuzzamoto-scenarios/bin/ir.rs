@@ -413,8 +413,8 @@ where
             // track which are in?
             let txo_map = meta.txo_map();
             let mempool_set: HashSet<_> = mempool.iter().map(|tx| tx.txid()).collect();
-            let unused_txos: Vec<usize> = txo_map.keys()
-                .filter(|k| !mempool_set.contains(k))
+            let unused_txos: Vec<usize> = txo_map.iter()
+                .filter(|(k, _)| !mempool_set.contains(k))
                 .map(|(_, v)| v.iter().copied())
                 .collect();
 
