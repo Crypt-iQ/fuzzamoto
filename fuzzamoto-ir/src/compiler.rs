@@ -80,12 +80,18 @@ pub type InstructionIndex = usize;
 
 pub type ConnectionId = usize;
 
+#[derive(Default)]
+pub struct TxoInfo {
+    pub used_txos: Vec<VariableIndex>,
+    pub created_txos: Vec<VariableIndex>,
+}
+
 #[derive(serde::Serialize, serde::Deserialize, Debug, Clone)]
 pub struct CompiledMetadata {
     // Map from blockhash to (header_var, block_var, block_transactions_var, tx_var_indices)
     block_tx_var_map: HashMap<bitcoin::BlockHash, (usize, usize, usize, Vec<usize>)>,
-    // Map from txid to a vector of txo variable indices
-    txo_var_map: HashMap<Txid, Vec<VariableIndex>>,
+    // Map from txid to vectors of txo variable indices
+    txo_var_map: HashMap<Txid, TxoInfo>,
     // Map from connection ids to connection variable indices.
     connection_map: HashMap<ConnectionId, VariableIndex>,
     // List of instruction indices that correspond to actions in the compiled program (does not include probe operation)
@@ -140,12 +146,12 @@ impl CompiledMetadata {
     }
 
     #[must_use]
-    pub fn txo_map(&self) -> &HashMap<Txid, Vec<VariableIndex>> {
+    pub fn txo_map(&self) -> &HashMap<Txid, TxoInfo> {
         &self.txo_var_map
     }
 
     #[must_use]
-    pub fn txo_variables(&self, txid: Txid) -> Option<&Vec<VariableIndex>> {
+    pub fn txo_variables(&self, txid: Txid) -> Option<&TxoInfo> {
         self.txo_var_map.get(&txid)
     }
 
@@ -1269,7 +1275,7 @@ impl Compiler {
                 }
 
                 let txo_index = self.variables.len();
-                self.output.metadata.txo_var_map.entry(txid).or_insert_with(Vec::new).push(txo_index);
+                self.output.metadata.txo_var_map.entry(txid).or_default().created_txos.push(txo_index);
 
                 self.append_variable(txo);
             }
@@ -2326,6 +2332,10 @@ impl Compiler {
 
         let txid = tx_var.tx.compute_txid();
         let id_bytes = *txid.as_raw_hash().as_byte_array();
+
+        // Populate txo_var_map with this txn's *used* txos.
+        let used_txos: Vec<usize> = tx_inputs_var.inputs.iter().map(|tx_input| tx_input.txo_var).collect();
+        self.output.metadata.txo_var_map.entry(txid).or_default().used_txos.extend(used_txos);
 
         // Create all `Txo`s for this transaction and store them on the new finalized tx var
         tx_var.txos = tx_outputs_var

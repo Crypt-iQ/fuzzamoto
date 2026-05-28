@@ -77,13 +77,13 @@ where
                     txvec.add_block_tx_request(get_block_txn.clone());
                 }
             }
-            ProbeResult::UnusedTxos { unused_txos } => {
+            ProbeResult::MempoolInvalid { used_txos, created_txos } => {
                 let current = *state.corpus().current();
                 if let Some(cur) = current
                     && let Ok(meta) = state.metadata_mut::<RuntimeMetadata>()
                 {
                     let txo_meta = meta.metadatas.entry(cur).or_default();
-                    txo_meta.add_txo_entry(unused_txos.clone());
+                    txo_meta.add_txo_entry(used_txos.clone(), created_txos.clone());
                 }
             }
             ProbeResult::Failure { command, reason } => {

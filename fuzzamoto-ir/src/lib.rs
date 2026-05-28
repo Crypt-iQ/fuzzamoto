@@ -331,7 +331,8 @@ pub struct GetBlockTxn {
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct TxoMetadata {
-    pub txos: Vec<usize>, // list of txos to not remove in get_random_utxos
+    pub used_txos: Vec<usize>,
+    pub created_txos: Vec<usize>,
 }
 
 impl Default for TxoMetadata {
@@ -347,8 +348,9 @@ pub enum ProbeResult {
     GetBlockTxn {
         get_block_txn: GetBlockTxn,
     },
-    UnusedTxos {
-        unused_txos: Vec<usize>,
+    MempoolInvalid {
+        used_txos: Vec<usize>
+        created_txos: Vec<usize>,
     },
     Failure {
         /// The command that failed to be decoded

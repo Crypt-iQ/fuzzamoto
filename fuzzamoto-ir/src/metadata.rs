@@ -38,9 +38,10 @@ impl PerTestcaseMetadata {
         &mut self.txo_metadata
     }
 
-    pub fn add_txo_entry(&mut self, txos: Vec<usize>) {
+    pub fn add_txo_entry(&mut self, used_txos: Vec<usize>, created_txos: Vec<usize>) {
         let txo_metadata = TxoMetadata {
-            txos,
+            used_txos,
+            created_txos,
         };
         self.txo_metadata = txo_metadata;
     }

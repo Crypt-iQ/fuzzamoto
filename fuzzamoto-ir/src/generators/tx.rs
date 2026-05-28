@@ -211,12 +211,18 @@ impl<R: RngCore> Generator<R> for SingleTxGenerator {
         rng: &mut R,
         meta: Option<&PerTestcaseMetadata>,
     ) -> GeneratorResult {
-        let mut skip_list : Vec<usize> = Vec::new();
-        if let Some(meta) = meta && !meta.txo_metadata.txos.is_empty() {
-            skip_list = meta.txo_metadata.txos.clone();
+        let mut used_txos : Vec<usize> = Vec::new();
+        let mut created_txos : Vec<usize> = Vec::new();
+        if let Some(meta) = meta {
+            if !meta.txo_metadata.used_txos.is_empty() {
+                used_txos = meta.txo_metadata.used_txos.clone();
+            }
+            if !meta.txo_metadata.created_txos.is_empty() {
+                created_txos = meta.txo_metadata.created_txos.clone();
+            }
         }
 
-        let funding_txos = builder.get_random_utxos(rng, skip_list);
+        let funding_txos = builder.get_random_utxos(rng, used_txos, created_txos);
         if funding_txos.is_empty() {
             return Err(GeneratorError::MissingVariables);
         }
@@ -275,12 +281,18 @@ impl<R: RngCore> Generator<R> for OneParentOneChildGenerator {
         rng: &mut R,
         meta: Option<&PerTestcaseMetadata>,
     ) -> GeneratorResult {
-        let mut skip_list : Vec<usize> = Vec::new();
-        if let Some(meta) = meta && !meta.txo_metadata.txos.is_empty() {
-            skip_list = meta.txo_metadata.txos.clone();
+        let mut used_txos : Vec<usize> = Vec::new();
+        let mut created_txos : Vec<usize> = Vec::new();
+        if let Some(meta) = meta {
+            if !meta.txo_metadata.used_txos.is_empty() {
+                used_txos = meta.txo_metadata.used_txos.clone();
+            }
+            if !meta.txo_metadata.created_txos.is_empty() {
+                created_txos = meta.txo_metadata.created_txos.clone();
+            }
         }
 
-        let funding_txos = builder.get_random_utxos(rng, skip_list);
+        let funding_txos = builder.get_random_utxos(rng, used_txos, created_txos);
         if funding_txos.is_empty() {
             return Err(GeneratorError::MissingVariables);
         }
@@ -348,12 +360,18 @@ impl<R: RngCore> Generator<R> for LongChainGenerator {
         rng: &mut R,
         meta: Option<&PerTestcaseMetadata>,
     ) -> GeneratorResult {
-        let mut skip_list : Vec<usize> = Vec::new();
-        if let Some(meta) = meta && !meta.txo_metadata.txos.is_empty() {
-            skip_list = meta.txo_metadata.txos.clone();
+        let mut used_txos : Vec<usize> = Vec::new();
+        let mut created_txos : Vec<usize> = Vec::new();
+        if let Some(meta) = meta {
+            if !meta.txo_metadata.used_txos.is_empty() {
+                used_txos = meta.txo_metadata.used_txos.clone();
+            }
+            if !meta.txo_metadata.created_txos.is_empty() {
+                created_txos = meta.txo_metadata.created_txos.clone();
+            }
         }
 
-        let mut funding_txos = builder.get_random_utxos(rng, skip_list);
+        let mut funding_txos = builder.get_random_utxos(rng, used_txos, created_txos);
         if funding_txos.is_empty() {
             return Err(GeneratorError::MissingVariables);
         }
@@ -418,12 +436,18 @@ impl<R: RngCore> Generator<R> for LargeTxGenerator {
         rng: &mut R,
         meta: Option<&PerTestcaseMetadata>,
     ) -> GeneratorResult {
-        let mut skip_list : Vec<usize> = Vec::new();
-        if let Some(meta) = meta && !meta.txo_metadata.txos.is_empty() {
-            skip_list = meta.txo_metadata.txos.clone();
+        let mut used_txos : Vec<usize> = Vec::new();
+        let mut created_txos : Vec<usize> = Vec::new();
+        if let Some(meta) = meta {
+            if !meta.txo_metadata.used_txos.is_empty() {
+                used_txos = meta.txo_metadata.used_txos.clone();
+            }
+            if !meta.txo_metadata.created_txos.is_empty() {
+                created_txos = meta.txo_metadata.created_txos.clone();
+            }
         }
 
-        let funding_txos = builder.get_random_utxos(rng, skip_list);
+        let funding_txos = builder.get_random_utxos(rng, used_txos, created_txos);
         if funding_txos.is_empty() {
             return Err(GeneratorError::MissingVariables);
         }

@@ -634,21 +634,17 @@ impl ProgramBuilder {
     }
 
     /// Get a random set of unspend transaction outputs
-    pub fn get_random_utxos<R: RngCore>(&self, rng: &mut R, skip_list: Vec<usize>) -> Vec<IndexedVariable> {
+    pub fn get_random_utxos<R: RngCore>(&self, rng: &mut R, used_txos: &Vec<usize>, created_txos: &Vec<usize>) -> Vec<IndexedVariable> {
         let mut utxos = HashSet::new();
 
         let mut var_count = 0;
-        let mut num_skipped = 0;
         for instruction in &self.instructions {
             match instruction.operation {
                 Operation::TakeTxo | Operation::LoadTxo { .. } => {
                     utxos.insert(var_count);
                 }
                 Operation::AddTxInput => {
-                    if skip_list.contains(&instruction.inputs[1]) {
-                        num_skipped += 1;
-                        continue;
-                    }
+                    //
                     if !utxos.remove(&instruction.inputs[1]) {
                         continue;
                     }
@@ -662,7 +658,15 @@ impl ProgramBuilder {
             var_count += instruction.operation.num_inner_outputs();
         }
 
-        log::info!("size of skip_list {}, skipped: {num_skipped}", skip_list.len());
+        // used_txos added back to utxos, not perfect since could be
+        // consumed by one valid, one invalid tx
+        utxos.extend(used_txos.iter().copied());
+
+        // remove all created_txos from utxos, this includes any added
+        // above from used_txos.
+        for txo in created_txos {
+            utxos.remove(txo);
+        }
 
         let all_utxos = utxos
             .iter()
