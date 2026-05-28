@@ -84,6 +84,8 @@ pub type ConnectionId = usize;
 pub struct CompiledMetadata {
     // Map from blockhash to (header_var, block_var, block_transactions_var, tx_var_indices)
     block_tx_var_map: HashMap<bitcoin::BlockHash, (usize, usize, usize, Vec<usize>)>,
+    // Map from txid to a vector of txo variable indices
+    txo_var_map: HashMap<Txid, Vec<VariableIndex>>,
     // Map from connection ids to connection variable indices.
     connection_map: HashMap<ConnectionId, VariableIndex>,
     // List of instruction indices that correspond to actions in the compiled program (does not include probe operation)
@@ -105,6 +107,7 @@ impl CompiledMetadata {
     pub fn new() -> Self {
         Self {
             block_tx_var_map: HashMap::new(),
+            txo_var_map: HashMap::new(),
             connection_map: HashMap::new(),
             action_indices: Vec::new(),
             variable_indices: Vec::new(),
@@ -134,6 +137,16 @@ impl CompiledMetadata {
             .values()
             .find(|(_, block_var, _, _)| *block_var == block_var_index)
             .map(|(_, _, block_txs_var, tx_vars)| (*block_txs_var, tx_vars.as_slice()))
+    }
+
+    #[must_use]
+    pub fn txo_map(&self) -> &HashMap<Txid, Vec<VariableIndex>> {
+        &self.txo_var_map
+    }
+
+    #[must_use]
+    pub fn txo_variables(&self, txid: Txid) -> Option<&Vec<VariableIndex>> {
+        self.txo_var_map.get(&txid)
     }
 
     // Get the list of instruction indices that correspond to actions in the compiled program
@@ -1247,12 +1260,16 @@ impl Compiler {
             }
             Operation::TakeTxo | Operation::TakeCoinbaseTxo => {
                 let tx_var = self.get_input_mut::<Tx>(&instruction.inputs, 0)?;
+                let txid = tx_var.id;
                 let num_txos = tx_var.txos.len();
                 let mut txo = Txo::new();
                 if num_txos != 0 {
                     txo = tx_var.txos[tx_var.output_selector % num_txos].clone();
                     tx_var.output_selector += 1;
                 }
+
+                let txo_index = self.variables.len();
+                self.output.metadata.txo_var_map.entry(&txid).or_insert_with(Vec::new).push(txo_index);
 
                 self.append_variable(txo);
             }
@@ -1990,6 +2007,12 @@ impl Compiler {
 
         let mut txdata = vec![coinbase_tx_var.tx.tx.clone()];
         txdata.extend(block_transactions_var.txs.iter().map(|tx| tx.tx.clone()));
+
+        // Not perfect! Every txid in the block is removed from tx_var_map. Could also put HashMap<block hash, Vec<txos>> in CompiledMetadata
+        // and check if those blocks are valid. If not, can keep the txos in txo_var_map.
+        for t in &txdata {
+            self.txo_var_map.remove(t.compute_txid());
+        }
 
         let mut block = bitcoin::Block {
             header: bitcoin::block::Header {

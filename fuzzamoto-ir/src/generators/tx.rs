@@ -209,9 +209,14 @@ impl<R: RngCore> Generator<R> for SingleTxGenerator {
         &self,
         builder: &mut ProgramBuilder,
         rng: &mut R,
-        _meta: Option<&PerTestcaseMetadata>,
+        meta: Option<&PerTestcaseMetadata>,
     ) -> GeneratorResult {
-        let funding_txos = builder.get_random_utxos(rng);
+        let mut skip_list : Vec<usize> = Vec::new();
+        if let Some(meta) = meta && !meta.txo_metadata.txos.is_empty() {
+            skip_list = meta.txo_metadata.txos.clone();
+        }
+
+        let funding_txos = builder.get_random_utxos(rng, skip_list);
         if funding_txos.is_empty() {
             return Err(GeneratorError::MissingVariables);
         }
@@ -268,9 +273,14 @@ impl<R: RngCore> Generator<R> for OneParentOneChildGenerator {
         &self,
         builder: &mut ProgramBuilder,
         rng: &mut R,
-        _meta: Option<&PerTestcaseMetadata>,
+        meta: Option<&PerTestcaseMetadata>,
     ) -> GeneratorResult {
-        let funding_txos = builder.get_random_utxos(rng);
+        let mut skip_list : Vec<usize> = Vec::new();
+        if let Some(meta) = meta && !meta.txo_metadata.txos.is_empty() {
+            skip_list = meta.txo_metadata.txos.clone();
+        }
+
+        let funding_txos = builder.get_random_utxos(rng, skip_list);
         if funding_txos.is_empty() {
             return Err(GeneratorError::MissingVariables);
         }
@@ -336,9 +346,14 @@ impl<R: RngCore> Generator<R> for LongChainGenerator {
         &self,
         builder: &mut ProgramBuilder,
         rng: &mut R,
-        _meta: Option<&PerTestcaseMetadata>,
+        meta: Option<&PerTestcaseMetadata>,
     ) -> GeneratorResult {
-        let mut funding_txos = builder.get_random_utxos(rng);
+        let mut skip_list : Vec<usize> = Vec::new();
+        if let Some(meta) = meta && !meta.txo_metadata.txos.is_empty() {
+            skip_list = meta.txo_metadata.txos.clone();
+        }
+
+        let mut funding_txos = builder.get_random_utxos(rng, skip_list);
         if funding_txos.is_empty() {
             return Err(GeneratorError::MissingVariables);
         }
@@ -401,9 +416,14 @@ impl<R: RngCore> Generator<R> for LargeTxGenerator {
         &self,
         builder: &mut ProgramBuilder,
         rng: &mut R,
-        _meta: Option<&PerTestcaseMetadata>,
+        meta: Option<&PerTestcaseMetadata>,
     ) -> GeneratorResult {
-        let funding_txos = builder.get_random_utxos(rng);
+        let mut skip_list : Vec<usize> = Vec::new();
+        if let Some(meta) = meta && !meta.txo_metadata.txos.is_empty() {
+            skip_list = meta.txo_metadata.txos.clone();
+        }
+
+        let funding_txos = builder.get_random_utxos(rng, skip_list);
         if funding_txos.is_empty() {
             return Err(GeneratorError::MissingVariables);
         }

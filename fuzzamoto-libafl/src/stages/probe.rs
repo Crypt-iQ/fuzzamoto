@@ -77,6 +77,15 @@ where
                     txvec.add_block_tx_request(get_block_txn.clone());
                 }
             }
+            ProbeResult::UnusedTxos { unused_txos } => {
+                let current = *state.corpus().current();
+                if let Some(cur) = current
+                    && let Ok(meta) = state.metadata_mut::<RuntimeMetadata>()
+                {
+                    let txo_meta = meta.metadatas.entry(cur).or_default();
+                    txo_meta.add_txo_entry(unused_txos.clone());
+                }
+            }
             ProbeResult::Failure { command, reason } => {
                 log::info!("Command {command:?} couln't be parsed; reason: {reason:?}");
             }

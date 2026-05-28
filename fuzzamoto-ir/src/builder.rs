@@ -634,7 +634,7 @@ impl ProgramBuilder {
     }
 
     /// Get a random set of unspend transaction outputs
-    pub fn get_random_utxos<R: RngCore>(&self, rng: &mut R) -> Vec<IndexedVariable> {
+    pub fn get_random_utxos<R: RngCore>(&self, rng: &mut R, skip_list: Vec<usize>) -> Vec<IndexedVariable> {
         let mut utxos = HashSet::new();
 
         let mut var_count = 0;
@@ -643,8 +643,13 @@ impl ProgramBuilder {
                 Operation::TakeTxo | Operation::LoadTxo { .. } => {
                     utxos.insert(var_count);
                 }
-                Operation::AddTxInput if !utxos.remove(&instruction.inputs[1]) => {
-                    continue;
+                Operation::AddTxInput => {
+                    if skip_list.contains(&instruction.inputs[1]) {
+                        continue;
+                    }
+                    if !utxos.remove(&instruction.inputs[1]) {
+                        continue;
+                    }
                 }
                 // AddTxInput instructions have no output variables so we can remove them and
                 // use `variable_count` above without issue

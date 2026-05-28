@@ -1,6 +1,8 @@
 #[cfg(any(feature = "oracle_netsplit", feature = "oracle_consensus"))]
 use std::time::{Duration, Instant};
 
+use std::collections::HashSet;
+
 use bitcoin::{
     bip152::BlockTransactionsRequest,
     consensus::{Decodable, encode},
@@ -405,6 +407,21 @@ where
         }
     }
 
+    fn print_mempool(&mut self, meta: &CompiledMetadata) {
+        let query = self.inner.target.get_mempool_entries();
+        if let Ok(mempool) = query {
+            // track which are in?
+            let txo_map = meta.txo_map();
+            let mempool_set: HashSet<_> = mempool.iter().map(|tx| tx.txid()).collect();
+            let unused_txos: Vec<usize> = txo_map.keys()
+                .filter(|k| !mempool_set.contains(k))
+                .map(|(_, v)| v.iter().copied())
+                .collect();
+
+            self.probe_results.push(ProbeResult::UnusedTxos { unused_txos: unused_txos });
+        }
+    }
+
     fn evaluate_oracles(&mut self) -> ScenarioResult {
         let crash_oracle = CrashOracle::<TX>::default();
         if let OracleResult::Fail(e) = crash_oracle.evaluate(&mut self.inner.target) {
@@ -566,10 +583,11 @@ where
         self.process_actions(testcase.program);
         self.ping_connections();
 
-        if self.recording_received_messages
-            && let Some(ret) = probe_recent_block_hashes(&self.inner.target, &metadata)
-        {
-            self.probe_results.push(ret);
+        if self.recording_received_messages {
+            if let Some(ret) = probe_recent_block_hashes(&self.inner.target, &metadata) {
+                self.probe_results.push(ret);
+            }
+            self.print_mempool(&metadata);
         }
 
         self.print_received();
