@@ -2011,7 +2011,7 @@ impl Compiler {
         // Not perfect! Every txid in the block is removed from tx_var_map. Could also put HashMap<block hash, Vec<txos>> in CompiledMetadata
         // and check if those blocks are valid. If not, can keep the txos in txo_var_map.
         for t in &txdata {
-            self.output.metadata.txo_var_map.remove(t.compute_txid());
+            self.output.metadata.txo_var_map.remove(&t.compute_txid());
         }
 
         let mut block = bitcoin::Block {
