@@ -415,7 +415,7 @@ where
             let mempool_set: HashSet<_> = mempool.iter().map(|tx| tx.txid()).collect();
             let unused_txos: Vec<usize> = txo_map.iter()
                 .filter(|(k, _)| !mempool_set.contains(k))
-                .map(|(_, v)| v.iter().copied())
+                .flat_map(|(_, v)| v.iter().copied())
                 .collect();
 
             self.probe_results.push(ProbeResult::UnusedTxos { unused_txos: unused_txos });
