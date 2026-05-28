@@ -638,6 +638,7 @@ impl ProgramBuilder {
         let mut utxos = HashSet::new();
 
         let mut var_count = 0;
+        let mut num_skipped = 0;
         for instruction in &self.instructions {
             match instruction.operation {
                 Operation::TakeTxo | Operation::LoadTxo { .. } => {
@@ -645,6 +646,7 @@ impl ProgramBuilder {
                 }
                 Operation::AddTxInput => {
                     if skip_list.contains(&instruction.inputs[1]) {
+                        num_skipped += 1;
                         continue;
                     }
                     if !utxos.remove(&instruction.inputs[1]) {
@@ -659,6 +661,8 @@ impl ProgramBuilder {
             var_count += instruction.operation.num_outputs();
             var_count += instruction.operation.num_inner_outputs();
         }
+
+        log::info!("size of skip_list {}, skipped: {num_skipped}", skip_list.len());
 
         let all_utxos = utxos
             .iter()
