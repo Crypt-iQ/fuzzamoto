@@ -51,7 +51,10 @@ use crate::{
     mutators::{IrGenerator, IrMutator, IrSpliceMutator, LibAflByteMutator},
     options::FuzzerOptions,
     schedulers::SupportedSchedulers,
-    stages::{IrMinimizerStage, ProbingStage, StabilityCheckStage, VerifyTimeoutsStage},
+    stages::{
+        IrMinimizerStage, ProbingStage, StabilityCheckStage, TxoGenerateStage,
+        VerifyTimeoutsStage,
+    },
 };
 
 #[cfg(feature = "bench")]
@@ -466,6 +469,19 @@ where
 
         let probing = ProbingStage::new(&stdout_observer_handle);
         let stability = StabilityCheckStage::new(&map_observer_handle, &map_feedback_name, 8);
+        // Drive the transaction generators with the recorded txo feedback directly, so
+        // the metadata reliably reaches a tx generator instead of competing for the
+        // first-mutation slot of the havoc scheduler.
+        let txo_generate = TxoGenerateStage::new(
+            vec![
+                Box::new(SingleTxGenerator),
+                Box::new(LongChainGenerator),
+                Box::new(LargeTxGenerator),
+                Box::new(OneParentOneChildGenerator),
+            ],
+            8,
+            rng.clone(),
+        );
         let mut stages = tuple_list!(
             ClosureStage::new(|_a: &mut _, _b: &mut _, _c: &mut _, _d: &mut _| {
                 // Always try minimizing at least for one pass
@@ -509,6 +525,7 @@ where
                 tuple_list!(
                     stability,
                     probing,
+                    txo_generate,
                     TuneableMutationalStage::new(&mut state, mutator),
                     timeout_verify_stage,
                     bench_stats_stage,

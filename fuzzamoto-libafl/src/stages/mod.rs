@@ -3,6 +3,9 @@ pub mod bench_stats;
 #[cfg(feature = "bench")]
 pub use bench_stats::*;
 
+pub mod generate;
+pub use generate::*;
+
 pub mod probe;
 pub use probe::*;
 
