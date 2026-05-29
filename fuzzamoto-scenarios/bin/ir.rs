@@ -424,25 +424,62 @@ where
         }
     }
 
-    fn print_mempool(&mut self, meta: &CompiledMetadata) {
-        let query = self.inner.target.get_mempool_entries();
-        if let Ok(mempool) = query {
-            // track which are in?
-            let txo_map = meta.txo_map();
-            let mempool_set: HashSet<_> = mempool.iter().map(|tx| tx.txid()).collect();
+    /// Collect the txids of every transaction confirmed in a block on the
+    /// *active* chain that this testcase built. Built blocks extend the tip
+    /// contiguously, so we walk back from the tip and stop as soon as we reach
+    /// a block we didn't build (i.e. the base chain), keeping this bounded by
+    /// the number of blocks the testcase added.
+    fn active_chain_txids(&self, meta: &CompiledMetadata) -> HashSet<bitcoin::Txid> {
+        let mut txids = HashSet::new();
+        let Some((mut hash, _height)) = self.inner.target.get_tip_info() else {
+            return txids;
+        };
 
-            let used_txos: Vec<usize> = txo_map.iter()
-                .filter(|(k, _)| !mempool_set.contains(k))
-                .flat_map(|(_, v)| v.used_txos.iter().copied())
-                .collect();
-
-            let created_txos: Vec<usize> = txo_map.iter()
-                .filter(|(k, _)| !mempool_set.contains(k))
-                .flat_map(|(_, v)| v.created_txos.iter().copied())
-                .collect();
-
-            self.probe_results.push(ProbeResult::MempoolInvalid { used_txos: used_txos, created_txos: created_txos });
+        while meta.block_variables(&hash).is_some() {
+            let Some(block) = self.inner.target.get_block(hash) else {
+                break;
+            };
+            for tx in &block.txdata {
+                txids.insert(tx.compute_txid());
+            }
+            hash = block.header.prev_blockhash;
         }
+
+        txids
+    }
+
+    fn print_mempool(&mut self, meta: &CompiledMetadata) {
+        let Ok(mempool) = self.inner.target.get_mempool_entries() else {
+            return;
+        };
+        let txo_map = meta.txo_map();
+
+        // A txn's outputs are live if the txn is in the mempool *or* confirmed
+        // in an active-chain block. Anything else (rejected, or only in a
+        // stale/inactive-chain block) is dead: its outputs don't exist and the
+        // inputs it claimed are unspent.
+        let mut live: HashSet<bitcoin::Txid> = mempool.iter().map(|e| *e.txid()).collect();
+        live.extend(self.active_chain_txids(meta));
+
+        let mut used_txos: Vec<usize> = Vec::new();
+        let mut created_txos: Vec<usize> = Vec::new();
+        let mut spent_by_live: HashSet<usize> = HashSet::new();
+        for (txid, info) in txo_map {
+            if live.contains(txid) {
+                spent_by_live.extend(info.used_txos.iter().copied());
+            } else {
+                used_txos.extend(info.used_txos.iter().copied());
+                created_txos.extend(info.created_txos.iter().copied());
+            }
+        }
+
+        // Don't free a txo that a live txn legitimately spent, even if some
+        // other (dead) txn also claimed it. The per-txid grouping in
+        // txo_var_map gives us this distinction.
+        used_txos.retain(|i| !spent_by_live.contains(i));
+
+        self.probe_results
+            .push(ProbeResult::MempoolInvalid { used_txos, created_txos });
     }
 
     fn evaluate_oracles(&mut self) -> ScenarioResult {

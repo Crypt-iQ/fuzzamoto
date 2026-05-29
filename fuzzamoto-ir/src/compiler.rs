@@ -2014,12 +2014,6 @@ impl Compiler {
         let mut txdata = vec![coinbase_tx_var.tx.tx.clone()];
         txdata.extend(block_transactions_var.txs.iter().map(|tx| tx.tx.clone()));
 
-        // Not perfect! Every txid in the block is removed from tx_var_map. Could also put HashMap<block hash, Vec<txos>> in CompiledMetadata
-        // and check if those blocks are valid. If not, can keep the txos in txo_var_map.
-        for t in &txdata {
-            self.output.metadata.txo_var_map.remove(&t.compute_txid());
-        }
-
         let mut block = bitcoin::Block {
             header: bitcoin::block::Header {
                 version: bitcoin::block::Version::from_consensus(block_version_var),
