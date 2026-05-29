@@ -268,20 +268,10 @@ impl<R: RngCore> Generator<R> for SingleTxGenerator {
     fn choose_index(
         &self,
         program: &crate::Program,
-        rng: &mut R,
+        _rng: &mut R,
         _meta: Option<&PerTestcaseMetadata>,
     ) -> Option<usize> {
-        if program.instructions.len() == 0 {
-            let from: usize = 0;
-            Some(from)
-        } else {
-            let from: usize = program.instructions.len() - 1;
-            program.get_random_instruction_index_from(
-                rng,
-                &<Self as Generator<R>>::requested_context(self),
-                from,
-            )
-        }
+        Some(program.instructions.len())
     }
 }
 
@@ -366,20 +356,10 @@ impl<R: RngCore> Generator<R> for OneParentOneChildGenerator {
     fn choose_index(
         &self,
         program: &crate::Program,
-        rng: &mut R,
+        _rng: &mut R,
         _meta: Option<&PerTestcaseMetadata>,
     ) -> Option<usize> {
-        if program.instructions.len() == 0 {
-            let from: usize = 0;
-            Some(from)
-        } else {
-            let from: usize = program.instructions.len() - 1;
-            program.get_random_instruction_index_from(
-                rng,
-                &<Self as Generator<R>>::requested_context(self),
-                from,
-            )
-        }
+        Some(program.instructions.len())
     }
 }
 
@@ -461,20 +441,10 @@ impl<R: RngCore> Generator<R> for LongChainGenerator {
     fn choose_index(
         &self,
         program: &crate::Program,
-        rng: &mut R,
+        _rng: &mut R,
         _meta: Option<&PerTestcaseMetadata>,
     ) -> Option<usize> {
-        if program.instructions.len() == 0 {
-            let from: usize = 0;
-            Some(from)
-        } else {
-            let from: usize = program.instructions.len() - 1;
-            program.get_random_instruction_index_from(
-                rng,
-                &<Self as Generator<R>>::requested_context(self),
-                from,
-            )
-        }
+        Some(program.instructions.len())
     }
 }
 
@@ -548,20 +518,10 @@ impl<R: RngCore> Generator<R> for LargeTxGenerator {
     fn choose_index(
         &self,
         program: &crate::Program,
-        rng: &mut R,
+        _rng: &mut R,
         _meta: Option<&PerTestcaseMetadata>,
     ) -> Option<usize> {
-        if program.instructions.len() == 0 {
-            let from: usize = 0;
-            Some(from)
-        } else {
-            let from: usize = program.instructions.len() - 1;
-            program.get_random_instruction_index_from(
-                rng,
-                &<Self as Generator<R>>::requested_context(self),
-                from,
-            )
-        }
+        Some(program.instructions.len())
     }
 }
 
