@@ -60,6 +60,9 @@ impl BitcoinCoreTarget {
             config.view_stdout = true;
         }
         config.args.extend_from_slice(&[
+            "-debug=validation",
+            "-debug=mempoolrej",
+            "-debug=mempool",
             "-txreconciliation",
             "-peerbloomfilters",
             "-peerblockfilters",
