@@ -51,7 +51,6 @@ type ScenarioTransport = fuzzamoto::connections::V2Transport;
 
 const COINBASE_MATURITY_HEIGHT_LIMIT: u32 = 100;
 const LATE_BLOCK_HEIGHT_LIMIT: u32 = 190;
-const COINBASE_VALUE: u64 = 25 * 100_000_000;
 // OP_TRUE script pubkey: 0x0 0x20 sha256(OP_TRUE)
 const OP_TRUE_SCRIPT_PUBKEY: [u8; 34] = [
     0u8, 32, 74, 232, 21, 114, 240, 110, 27, 136, 253, 92, 237, 122, 26, 0, 9, 69, 67, 46, 131,
@@ -158,7 +157,13 @@ where
         }
     }
 
-    /// Extract coinbase outputs from mature blocks (height < 100) for use in IR programs
+    /// Extract coinbase outputs from mature blocks (height < 100) for use in IR programs.
+    ///
+    /// Each coinbase pays to `COINBASE_NUM_SPENDABLE_OUTPUTS` (10) equal OP_TRUE P2WSH
+    /// outputs plus a single (unspendable) witness commitment output. Every spendable
+    /// output is turned into a `Txo`, so IR programs get 10 UTXOs per mature block. The
+    /// per-output value is read straight from the coinbase so it always matches what was
+    /// mined, and the witness commitment output is skipped via its script pubkey.
     fn build_txos(inner: &GenericScenario<TX, T>) -> Vec<fuzzamoto_ir::Txo> {
         let mut txos = Vec::new();
         for (block, _height) in inner
@@ -176,13 +181,25 @@ where
                     .as_slice(),
             );
 
-            txos.push(fuzzamoto_ir::Txo {
-                outpoint: (hash, 0u32),
-                value: COINBASE_VALUE,
-                script_pubkey: OP_TRUE_SCRIPT_PUBKEY.to_vec(),
-                spending_script_sig: vec![],
-                spending_witness: vec![vec![0x51]],
-            });
+            // Account for every spendable output of the coinbase (10 per block).
+            // The witness commitment output has a different script pubkey and is
+            // skipped, leaving only the OP_TRUE P2WSH outputs.
+            for (vout, output) in coinbase.output.iter().enumerate() {
+                if output.script_pubkey.as_bytes() != OP_TRUE_SCRIPT_PUBKEY.as_slice() {
+                    continue;
+                }
+
+                txos.push(fuzzamoto_ir::Txo {
+                    outpoint: (
+                        hash,
+                        u32::try_from(vout).expect("coinbase vout fits in u32"),
+                    ),
+                    value: output.value.to_sat(),
+                    script_pubkey: OP_TRUE_SCRIPT_PUBKEY.to_vec(),
+                    spending_script_sig: vec![],
+                    spending_witness: vec![vec![0x51]],
+                });
+            }
         }
         txos
     }

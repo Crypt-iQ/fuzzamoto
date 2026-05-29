@@ -13,6 +13,12 @@ use bitcoin_hashes::sha256;
 // Consists of OP_RETURN, OP_PUSHBYTES_36, and four "witness header" bytes.
 const WITNESS_COMMITMENT_MAGIC: [u8; 6] = [0x6a, 0x24, 0xaa, 0x21, 0xa9, 0xed];
 
+/// Number of equal, independently spendable OP_TRUE P2WSH outputs created in
+/// every mined coinbase transaction (in addition to the witness commitment
+/// output). This gives downstream IR programs this many spendable UTXOs per
+/// mature block.
+pub const COINBASE_NUM_SPENDABLE_OUTPUTS: usize = 10;
+
 #[must_use]
 pub fn create_witness_commitment_output(witness_merkle_root: WitnessMerkleNode) -> TxOut {
     let commitment = Block::compute_witness_commitment(&witness_merkle_root, &[0u8; 32]);
@@ -75,6 +81,25 @@ pub fn mine_block(prev_hash: BlockHash, height: u32, time: u32) -> Block {
     let mut witness = Witness::new();
     witness.push([0u8; 32]);
 
+    // Split the coinbase reward across `COINBASE_NUM_SPENDABLE_OUTPUTS` equal
+    // OP_TRUE P2WSH outputs so IR programs get that many spendable UTXOs per
+    // block. The total is kept at 25 BTC (10 * 2.5 BTC), which stays within the
+    // block subsidy at every height the scenario mines (50 BTC below the first
+    // halving at height 150, 25 BTC at/after it), so every block remains valid.
+    let output_value =
+        Amount::from_sat(2_500_000_000 / COINBASE_NUM_SPENDABLE_OUTPUTS as u64);
+    let mut outputs: Vec<TxOut> = (0..COINBASE_NUM_SPENDABLE_OUTPUTS)
+        .map(|_| TxOut {
+            value: output_value,
+            script_pubkey: ScriptBuf::from_bytes(p2wsh_optrue_spk.clone()),
+        })
+        .collect();
+    // The witness commitment output is appended last so the spendable outputs
+    // occupy the leading, contiguous vout indices `0..COINBASE_NUM_SPENDABLE_OUTPUTS`.
+    outputs.push(create_witness_commitment_output(
+        WitnessMerkleNode::from_raw_hash(Wtxid::all_zeros().into()),
+    ));
+
     // Create a coinbase transaction
     let coinbase = Transaction {
         version: transaction::Version(1),
@@ -89,15 +114,7 @@ pub fn mine_block(prev_hash: BlockHash, height: u32, time: u32) -> Block {
             sequence: Sequence(0xFFFF_FFFF),
             witness,
         }],
-        output: vec![
-            TxOut {
-                value: Amount::from_int_btc(25),
-                script_pubkey: p2wsh_optrue_spk.into(),
-            },
-            create_witness_commitment_output(WitnessMerkleNode::from_raw_hash(
-                Wtxid::all_zeros().into(),
-            )),
-        ],
+        output: outputs,
     };
 
     // Create the block
