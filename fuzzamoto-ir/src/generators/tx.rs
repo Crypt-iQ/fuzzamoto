@@ -264,6 +264,25 @@ impl<R: RngCore> Generator<R> for SingleTxGenerator {
     fn name(&self) -> &'static str {
         "SingleTxGenerator"
     }
+
+    fn choose_index(
+        &self,
+        program: &crate::Program,
+        _rng: &mut R,
+        _meta: Option<&PerTestcaseMetadata>,
+    ) -> Option<usize> {
+        if program.instructions.len() == 0 {
+            let from: usize = 0;
+            from
+        } else {
+            let from: usize = program.instructions.len() - 1;
+            program.get_random_instruction_index_from(
+                rng,
+                &<Self as Generator<R>>::requested_context(self),
+                from,
+            )
+        }
+    }
 }
 
 /// `OneParentOneChildGenerator` generates instructions for creating a 1P1C package and sending it
@@ -343,6 +362,25 @@ impl<R: RngCore> Generator<R> for OneParentOneChildGenerator {
     fn name(&self) -> &'static str {
         "1P1CGenerator"
     }
+
+    fn choose_index(
+        &self,
+        program: &crate::Program,
+        _rng: &mut R,
+        _meta: Option<&PerTestcaseMetadata>,
+    ) -> Option<usize> {
+        if program.instructions.len() == 0 {
+            let from: usize = 0;
+            from
+        } else {
+            let from: usize = program.instructions.len() - 1;
+            program.get_random_instruction_index_from(
+                rng,
+                &<Self as Generator<R>>::requested_context(self),
+                from,
+            )
+        }
+    }
 }
 
 /// `LongChainGenerator` generates instructions for creating a chain of 25 transactions and sending
@@ -419,6 +457,25 @@ impl<R: RngCore> Generator<R> for LongChainGenerator {
     fn name(&self) -> &'static str {
         "LongChainGenerator"
     }
+
+    fn choose_index(
+        &self,
+        program: &crate::Program,
+        _rng: &mut R,
+        _meta: Option<&PerTestcaseMetadata>,
+    ) -> Option<usize> {
+        if program.instructions.len() == 0 {
+            let from: usize = 0;
+            from
+        } else {
+            let from: usize = program.instructions.len() - 1;
+            program.get_random_instruction_index_from(
+                rng,
+                &<Self as Generator<R>>::requested_context(self),
+                from,
+            )
+        }
+    }
 }
 
 /// `LargeTxGenerator` generates instructions for creating a single large transaction and sending
@@ -486,6 +543,25 @@ impl<R: RngCore> Generator<R> for LargeTxGenerator {
 
     fn name(&self) -> &'static str {
         "LargeTxGenerator"
+    }
+
+    fn choose_index(
+        &self,
+        program: &crate::Program,
+        _rng: &mut R,
+        _meta: Option<&PerTestcaseMetadata>,
+    ) -> Option<usize> {
+        if program.instructions.len() == 0 {
+            let from: usize = 0;
+            from
+        } else {
+            let from: usize = program.instructions.len() - 1;
+            program.get_random_instruction_index_from(
+                rng,
+                &<Self as Generator<R>>::requested_context(self),
+                from,
+            )
+        }
     }
 }
 
