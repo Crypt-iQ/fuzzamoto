@@ -572,7 +572,7 @@ where
         dump_log_to_host();
 
         // stop the node, see that it can cleanly shutdown.
-        self.inner.target.stop();
+        self.inner.target.drop();
 
         res
     }
