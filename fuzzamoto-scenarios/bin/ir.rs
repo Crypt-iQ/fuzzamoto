@@ -571,6 +571,9 @@ where
         #[cfg(feature = "nyx_log")]
         dump_log_to_host();
 
+        // stop the node, see that it can cleanly shutdown.
+        self.inner.target.stop();
+
         res
     }
 }
