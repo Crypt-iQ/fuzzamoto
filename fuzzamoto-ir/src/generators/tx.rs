@@ -174,12 +174,9 @@ fn build_tx<R: RngCore>(
         &Operation::EndBuildTx,
     );
 
-    // Make every output of the transaction spendable except OpReturn
+    // Make every output of the transaction spendable
     let mut outputs = Vec::new();
     for (_, output_type) in output_amounts {
-        if matches!(output_type, OutputType::OpReturn) {
-            continue;
-        }
         let mut txo_var =
             builder.force_append_expect_output(vec![const_tx_var.index], &Operation::TakeTxo);
         if matches!(output_type, OutputType::PayToTaproot) && rng.gen_bool(0.5) {
