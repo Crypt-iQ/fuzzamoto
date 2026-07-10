@@ -72,7 +72,7 @@ impl BitcoinCoreTarget {
             "-keypool=10",
             "-listenonion=0",
             "-i2pacceptincoming=0",
-            "-maxmempool=5", // 5MB
+            "-maxmempool=1000", // 5MB
             "-dbcache=4",    // 4MiB
             "-datacarriersize=1000000",
             "-peertimeout=999999999",
