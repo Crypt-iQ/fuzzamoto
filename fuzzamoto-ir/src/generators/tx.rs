@@ -1,5 +1,5 @@
 use crate::{
-    IndexedVariable, Operation, PerTestcaseMetadata, TaprootLeafSpec,
+    IndexedVariable, MempoolOutput, MempoolTxo, Operation, PerTestcaseMetadata, TaprootLeafSpec, Variable,
     generators::{Generator, ProgramBuilder},
 };
 use bitcoin::{
@@ -10,6 +10,7 @@ use bitcoin::{
     taproot::LeafVersion,
 };
 use rand::{Rng, RngCore, seq::SliceRandom};
+use std::marker::PhantomData;
 
 use super::{GeneratorError, GeneratorResult};
 
@@ -197,6 +198,141 @@ fn build_tx<R: RngCore>(
     (const_tx_var, outputs)
 }
 
+/// Resolve funding UTXOs, preferring coins the node has actually validated.
+///
+/// `builder.get_random_utxos` treats every `LoadTxo` and `TakeTxo` output as spendable. But a
+/// `TakeTxo` output is only spendable if the node accepted its parent transaction; outputs of
+/// rejected transactions become "phantom" UTXOs that fund descendants the node rejects with
+/// `bad-txns-inputs-missingorspent` — a dominant reason mempool-size feedback plateaus.
+///
+/// With probe metadata available, fund only from (a) `LoadTxo` outputs (seed coinbases, always
+/// valid) and (b) `TakeTxo` outputs whose parent transaction is in the probed mempool (validated),
+/// each validated against the builder's live variable space. If metadata is absent (seed
+/// generation) or yields no validated coins, fall back to the unfiltered pool so bootstrapping
+/// still works.
+fn validated_utxos<R: RngCore>(
+    builder: &mut ProgramBuilder,
+    rng: &mut R,
+    meta: Option<&PerTestcaseMetadata>,
+) -> Vec<IndexedVariable> {
+    let Some(meta) = meta else {
+        return builder.get_random_utxos(rng);
+    };
+
+    // Gather candidate mempool outputs (flattened across mempool txs).
+    let mut candidates: Vec<&MempoolOutput> = Vec::new();
+    for entry in &meta.txo_metadata().txo_entry {
+        for out in &entry.outputs {
+            candidates.push(out);
+        }
+    }
+    let mempool_total = meta.txo_metadata().txo_entry.len();
+
+    if candidates.is_empty() {
+        log::info!(
+            "[gate-dbg] validated_utxos: mempool_candidates=0 fallback=true (pool_total={})",
+            builder.count_all_utxos()
+        );
+        return builder.get_random_utxos(rng);
+    }
+
+    // Emit a `LoadTxo` for each of a random subset of mempool outputs. A `LoadTxo` declares the
+    // coin by raw outpoint/value/scripts, so the resulting Txo variable is always in scope at the
+    // insertion point — no dependency on a program-relative variable index.
+    let n = rng.gen_range(1..=candidates.len().min(32));
+    let chosen: Vec<MempoolOutput> = candidates
+        .choose_multiple(rng, n)
+        .map(|o| (*o).clone())
+        .collect();
+
+    let mut funding = Vec::new();
+    for out in &chosen {
+        let v = builder.force_append_expect_output(
+            vec![],
+            &Operation::LoadTxo {
+                outpoint: out.outpoint,
+                value: out.value,
+                script_pubkey: out.script_pubkey.clone(),
+                spending_script_sig: out.spending_script_sig.clone(),
+                spending_witness: out.spending_witness.clone(),
+            },
+        );
+        funding.push(v);
+    }
+
+    log::info!(
+        "[gate-dbg] validated_utxos: mempool_txs={mempool_total} candidates={} loaded={} pool_total={}",
+        candidates.len(),
+        funding.len(),
+        builder.count_all_utxos()
+    );
+
+    funding
+}
+
+/// Resolve the set of funding txos a pool-based transaction generator should spend.
+///
+/// Funds from the builder's own in-scope UTXO pool via `get_random_utxos`, which includes the
+/// pre-created seed UTXOs (so the mempool can bootstrap from an empty state) as well as outputs
+/// created earlier in the same program. This is used in both the CLI seed-generation context
+/// (where no runtime metadata exists) and during fuzzing.
+///
+/// The "only fire as the first sub-mutation of a scheduled stack" gate is NOT enforced here — it
+/// lives in the `IrGenerator` mutator via `Generator::requires_metadata`, because only the mutator
+/// layer knows the sub-mutation index. Enforcing it here (by keying on `meta.is_none()`) would
+/// also break CLI seed generation, which always passes `meta == None`.
+fn resolve_funding_txos<R: RngCore>(
+    builder: &mut ProgramBuilder,
+    rng: &mut R,
+    meta: Option<&PerTestcaseMetadata>,
+) -> Result<Vec<IndexedVariable>, GeneratorError> {
+    let funding_txos = validated_utxos(builder, rng, meta);
+    log::debug!(
+        "[gate-dbg] resolve_funding_txos: validated_utxos returned {} txos (meta={})",
+        funding_txos.len(),
+        meta.is_some()
+    );
+    if funding_txos.is_empty() {
+        log::debug!("[gate-dbg] resolve_funding_txos: EMPTY -> MissingVariables (no spendable UTXOs)");
+        return Err(GeneratorError::MissingVariables);
+    }
+    Ok(funding_txos)
+}
+
+/// Choose an insertion index for a transaction generator such that at least one spendable `Txo`
+/// already exists in the program prefix before the insertion point.
+///
+/// Transaction generators fund from the builder's in-scope UTXO pool (`get_random_utxos`), which is
+/// populated only by `LoadTxo` / `TakeTxo` / `TakeCoinbaseTxo` instructions. If a generator is
+/// inserted before any such instruction, it has nothing to spend and fails. Rather than pinning
+/// these generators to the front of the program (which prevents them from ever seeing a UTXO
+/// produced later, e.g. by `TxoGenerator`), anchor the insertion *after* a randomly chosen
+/// UTXO-defining instruction. Returns `None` when the program contains no UTXO yet, in which case
+/// the generator simply does not run this time.
+fn choose_index_after_utxo<R: RngCore>(
+    program: &crate::Program,
+    rng: &mut R,
+    context: &crate::InstructionContext,
+) -> Option<usize> {
+    let utxo_instrs: Vec<usize> = program
+        .instructions
+        .iter()
+        .enumerate()
+        .filter(|(_, instr)| {
+            matches!(
+                instr.operation,
+                Operation::LoadTxo { .. } | Operation::TakeTxo | Operation::TakeCoinbaseTxo
+            )
+        })
+        .map(|(i, _)| i)
+        .collect();
+
+    // Anchor after a random UTXO-defining instruction, then take a valid insertion index at or
+    // beyond that point (respecting the generator's required context).
+    let anchor = *utxo_instrs.choose(rng)?;
+    program.get_random_instruction_index_from(rng, context, anchor + 1)
+}
+
 /// `SingleTxGenerator` generates instructions for a single new transaction into a program
 #[derive(Default)]
 pub struct SingleTxGenerator;
@@ -206,12 +342,9 @@ impl<R: RngCore> Generator<R> for SingleTxGenerator {
         &self,
         builder: &mut ProgramBuilder,
         rng: &mut R,
-        _meta: Option<&PerTestcaseMetadata>,
+        meta: Option<&PerTestcaseMetadata>,
     ) -> GeneratorResult {
-        let funding_txos = builder.get_random_utxos(rng);
-        if funding_txos.is_empty() {
-            return Err(GeneratorError::MissingVariables);
-        }
+        let funding_txos = resolve_funding_txos(builder, rng, meta)?;
 
         let tx_version = *[1, 2, 3].choose(rng).unwrap();
         let output_amounts = {
@@ -253,6 +386,17 @@ impl<R: RngCore> Generator<R> for SingleTxGenerator {
     fn name(&self) -> &'static str {
         "SingleTxGenerator"
     }
+
+    fn choose_index(
+        &self,
+        program: &crate::Program,
+        rng: &mut R,
+        _meta: Option<&mut PerTestcaseMetadata>,
+    ) -> Option<usize> {
+        // Run after a UTXO exists in the program (e.g. a `LoadTxo` produced by `TxoGenerator`),
+        // so there is something to fund the transaction from.
+        choose_index_after_utxo(program, rng, &<Self as Generator<R>>::requested_context(self))
+    }
 }
 
 /// `OneParentOneChildGenerator` generates instructions for creating a 1P1C package and sending it
@@ -265,12 +409,9 @@ impl<R: RngCore> Generator<R> for OneParentOneChildGenerator {
         &self,
         builder: &mut ProgramBuilder,
         rng: &mut R,
-        _meta: Option<&PerTestcaseMetadata>,
+        meta: Option<&PerTestcaseMetadata>,
     ) -> GeneratorResult {
-        let funding_txos = builder.get_random_utxos(rng);
-        if funding_txos.is_empty() {
-            return Err(GeneratorError::MissingVariables);
-        }
+        let funding_txos = resolve_funding_txos(builder, rng, meta)?;
 
         let (parent_tx_var, parent_output_vars) = build_tx(
             builder,
@@ -321,6 +462,17 @@ impl<R: RngCore> Generator<R> for OneParentOneChildGenerator {
     fn name(&self) -> &'static str {
         "1P1CGenerator"
     }
+
+    fn choose_index(
+        &self,
+        program: &crate::Program,
+        rng: &mut R,
+        _meta: Option<&mut PerTestcaseMetadata>,
+    ) -> Option<usize> {
+        // Run after a UTXO exists in the program (e.g. a `LoadTxo` produced by `TxoGenerator`),
+        // so there is something to fund the transaction from.
+        choose_index_after_utxo(program, rng, &<Self as Generator<R>>::requested_context(self))
+    }
 }
 
 /// `LongChainGenerator` generates instructions for creating a chain of 25 transactions and sending
@@ -333,12 +485,9 @@ impl<R: RngCore> Generator<R> for LongChainGenerator {
         &self,
         builder: &mut ProgramBuilder,
         rng: &mut R,
-        _meta: Option<&PerTestcaseMetadata>,
+        meta: Option<&PerTestcaseMetadata>,
     ) -> GeneratorResult {
-        let mut funding_txos = builder.get_random_utxos(rng);
-        if funding_txos.is_empty() {
-            return Err(GeneratorError::MissingVariables);
-        }
+        let mut funding_txos = resolve_funding_txos(builder, rng, meta)?;
 
         // Create a chain of 25 transactions (default ancestor limit in Bitcoin Core), where each
         // transaction spends the output of the previous transaction
@@ -386,6 +535,17 @@ impl<R: RngCore> Generator<R> for LongChainGenerator {
     fn name(&self) -> &'static str {
         "LongChainGenerator"
     }
+
+    fn choose_index(
+        &self,
+        program: &crate::Program,
+        rng: &mut R,
+        _meta: Option<&mut PerTestcaseMetadata>,
+    ) -> Option<usize> {
+        // Run after a UTXO exists in the program (e.g. a `LoadTxo` produced by `TxoGenerator`),
+        // so there is something to fund the transaction from.
+        choose_index_after_utxo(program, rng, &<Self as Generator<R>>::requested_context(self))
+    }
 }
 
 /// `LargeTxGenerator` generates instructions for creating a single large transaction and sending
@@ -398,12 +558,9 @@ impl<R: RngCore> Generator<R> for LargeTxGenerator {
         &self,
         builder: &mut ProgramBuilder,
         rng: &mut R,
-        _meta: Option<&PerTestcaseMetadata>,
+        meta: Option<&PerTestcaseMetadata>,
     ) -> GeneratorResult {
-        let funding_txos = builder.get_random_utxos(rng);
-        if funding_txos.is_empty() {
-            return Err(GeneratorError::MissingVariables);
-        }
+        let funding_txos = resolve_funding_txos(builder, rng, meta)?;
 
         let conn_var = builder.get_or_create_random_connection(rng);
 
@@ -442,6 +599,190 @@ impl<R: RngCore> Generator<R> for LargeTxGenerator {
 
     fn name(&self) -> &'static str {
         "LargeTxGenerator"
+    }
+
+    fn choose_index(
+        &self,
+        program: &crate::Program,
+        rng: &mut R,
+        _meta: Option<&mut PerTestcaseMetadata>,
+    ) -> Option<usize> {
+        // Run after a UTXO exists in the program (e.g. a `LoadTxo` produced by `TxoGenerator`),
+        // so there is something to fund the transaction from.
+        choose_index_after_utxo(program, rng, &<Self as Generator<R>>::requested_context(self))
+    }
+}
+
+/// `PredicateTxGenerator` generates a transaction that spends a transaction currently in the
+/// node's mempool, selected by a predicate over the probed `MempoolTxo` entries.
+///
+/// Unlike the pool-based generators, this one funds exclusively from txos the node actually
+/// accepted (the probed mempool), so it never spends IR-structural phantom outputs. The
+/// `choose_index` override anchors the insertion point *after* the instruction that defines the
+/// chosen txo, so the funded transaction still exists in the mutated program.
+pub struct PredicateTxGenerator<F> {
+    predicate: F,
+    phantom: PhantomData<F>,
+}
+
+impl<F, R: RngCore> Generator<R> for PredicateTxGenerator<F>
+where
+    F: Fn(&MempoolTxo) -> bool,
+{
+    fn generate(
+        &self,
+        builder: &mut ProgramBuilder,
+        rng: &mut R,
+        meta: Option<&PerTestcaseMetadata>,
+    ) -> GeneratorResult {
+        let Some(meta) = meta else {
+            log::debug!("[gate-dbg] Predicate::generate: meta=None -> skip");
+            return Err(GeneratorError::MissingVariables);
+        };
+        if meta.txo_metadata().txo_entry.is_empty() {
+            log::debug!("[gate-dbg] Predicate::generate: mempool txo_entry EMPTY -> skip");
+            return Err(GeneratorError::MissingVariables);
+        }
+
+        let Some(chosen) = meta.txo_metadata().choice else {
+            // `choose_index` did not select a txo (no entry satisfied the predicate).
+            log::debug!("[gate-dbg] Predicate::generate: choice=None -> skip");
+            return Err(GeneratorError::MissingVariables);
+        };
+        let Some(entry) = meta.txo_metadata().txo_entry.get(chosen) else {
+            log::debug!("[gate-dbg] Predicate::generate: chosen index {chosen} out of range -> skip");
+            return Err(GeneratorError::MissingVariables);
+        };
+        log::debug!(
+            "[gate-dbg] Predicate::generate: spending mempool txo (var={}, inst={})",
+            entry.definition.0,
+            entry.definition.1
+        );
+
+        // `entry.definition.0` is a variable index captured at probe/compile time. The builder
+        // here holds only the mutation prefix, so that index is only usable if it currently
+        // resolves to an in-scope `Txo` in *this* builder. Validate it via `get_variable` (which
+        // checks existence, scope, and type) and skip rather than fabricate an index — passing an
+        // unresolved/mistyped index to `build_tx` makes `AddTxInput`'s `force_append` panic.
+        let Some(funding_txo) = builder.get_variable(entry.definition.0) else {
+            log::debug!(
+                "[gate-dbg] Predicate::generate: funding var {} not in scope in builder -> skip",
+                entry.definition.0
+            );
+            return Err(GeneratorError::MissingVariables);
+        };
+        if !matches!(funding_txo.var, Variable::Txo) {
+            log::debug!(
+                "[gate-dbg] Predicate::generate: funding var {} is not a Txo ({:?}) -> skip",
+                entry.definition.0,
+                funding_txo.var
+            );
+            return Err(GeneratorError::MissingVariables);
+        }
+
+        let tx_version = *[1, 2, 3].choose(rng).unwrap();
+        let output_amounts = [(
+            rng.gen_range(5000..100_000_000),
+            get_random_output_type(rng),
+        )];
+        let (const_tx_var, _) = build_tx(
+            builder,
+            rng,
+            std::slice::from_ref(&funding_txo),
+            tx_version,
+            &output_amounts,
+        );
+
+        let conn_var = builder.get_or_create_random_connection(rng);
+
+        let mut_inventory_var =
+            builder.force_append_expect_output(vec![], &Operation::BeginBuildInventory);
+        builder.force_append(
+            vec![mut_inventory_var.index, const_tx_var.index],
+            &Operation::AddWtxidInv,
+        );
+        let const_inventory_var = builder
+            .force_append_expect_output(vec![mut_inventory_var.index], &Operation::EndBuildInventory);
+
+        builder.force_append(
+            vec![conn_var.index, const_inventory_var.index],
+            &Operation::SendInv,
+        );
+        builder.force_append(vec![conn_var.index, const_tx_var.index], &Operation::SendTx);
+
+        Ok(())
+    }
+
+    fn choose_index(
+        &self,
+        program: &crate::Program,
+        rng: &mut R,
+        meta: Option<&mut PerTestcaseMetadata>,
+    ) -> Option<usize> {
+        let meta = meta?;
+        let filtered = meta
+            .txo_metadata()
+            .txo_entry
+            .iter()
+            .enumerate()
+            .filter(|(_, x)| (self.predicate)(x))
+            .map(|(idx, entry)| (idx, entry.definition.1))
+            .collect::<Vec<_>>();
+
+        let (chosen_idx, defining_instruction) = *filtered.choose(rng)?;
+        meta.txo_metadata_mut().choice = Some(chosen_idx);
+        program.get_random_instruction_index_from(
+            rng,
+            &<Self as Generator<R>>::requested_context(self),
+            defining_instruction + 1,
+        )
+    }
+
+    fn name(&self) -> &'static str {
+        "PredicateTxGenerator"
+    }
+
+    fn requires_metadata(&self) -> bool {
+        true
+    }
+}
+
+impl<F> PredicateTxGenerator<F> {
+    #[must_use]
+    pub fn new(predicate: F) -> Self {
+        Self {
+            predicate,
+            phantom: PhantomData,
+        }
+    }
+}
+
+impl PredicateTxGenerator<fn(&MempoolTxo) -> bool> {
+    /// Spend a mempool txo that is already spent by another mempool tx (exercises RBF / conflicts).
+    #[must_use]
+    pub fn double_spend() -> Self {
+        Self {
+            predicate: |x: &MempoolTxo| !x.spentby.is_empty(),
+            phantom: PhantomData,
+        }
+    }
+
+    /// Spend a mempool txo with no in-mempool ancestors (extends fresh chains).
+    #[must_use]
+    pub fn chain_spend() -> Self {
+        Self {
+            predicate: |x: &MempoolTxo| x.depends.is_empty(),
+            phantom: PhantomData,
+        }
+    }
+
+    /// Spend any mempool txo.
+    #[must_use]
+    pub fn any() -> Self {
+        Self {
+            predicate: |_: &MempoolTxo| true,
+            phantom: PhantomData,
+        }
     }
 }
 
@@ -601,4 +942,86 @@ fn random_node_hash<R: RngCore>(rng: &mut R) -> [u8; 32] {
     let mut hash = [0u8; 32];
     rng.fill_bytes(&mut hash);
     hash
+}
+
+#[cfg(test)]
+mod gate_tests {
+    use super::*;
+    use crate::generators::txo::TxoGenerator;
+    use crate::{ProgramContext, Txo};
+    use rand::SeedableRng;
+    use rand::rngs::SmallRng;
+
+    fn ctx() -> ProgramContext {
+        ProgramContext {
+            num_nodes: 1,
+            num_connections: 1,
+            timestamp: 0,
+        }
+    }
+
+    fn seed_txo() -> Txo {
+        Txo {
+            outpoint: ([1u8; 32], 0),
+            value: 25 * 100_000_000,
+            script_pubkey: vec![0x51],
+            spending_script_sig: vec![],
+            spending_witness: vec![vec![0x51]],
+        }
+    }
+
+    /// Reproduces the CLI seed-generation call: a tx generator invoked with `meta == None` must
+    /// still produce instructions (funding from the IR pool), otherwise the initial corpus would
+    /// contain no transactions and the mempool could never bootstrap.
+    #[test]
+    fn tx_generator_produces_instructions_with_none_metadata() {
+        let mut rng = SmallRng::seed_from_u64(1);
+        let mut builder = ProgramBuilder::new(ctx());
+
+        // Seed a spendable UTXO into the IR pool (as the CLI does via TxoGenerator).
+        let txo_gen = TxoGenerator::new(vec![seed_txo()]);
+        txo_gen
+            .generate(&mut builder, &mut rng, None)
+            .expect("TxoGenerator should append a LoadTxo");
+        let after_txo = builder.instructions.len();
+        assert!(after_txo >= 1, "LoadTxo should have been appended");
+
+        // The exact call the seed generator makes: SingleTxGenerator with meta = None.
+        let tx_gen = SingleTxGenerator;
+        tx_gen.generate(&mut builder, &mut rng, None)
+            .expect("SingleTxGenerator must fund from the IR pool when meta is None");
+
+        assert!(
+            builder.instructions.len() > after_txo,
+            "SingleTxGenerator should append transaction-building instructions"
+        );
+    }
+
+    /// All transaction-producing generators are gated: the mutator only runs them as the first
+    /// sub-mutation of a stack (where metadata is present and no prior sub-mutation has reordered
+    /// or spent their inputs). `StackResetMutator` guarantees the per-stack counter resets so this
+    /// gate cannot wedge. Coinbase is not a mempool tx and stays ungated.
+    #[test]
+    fn tx_generators_require_metadata_flag() {
+        // `PredicateTxGenerator` funds from probed mempool metadata, so it must receive metadata
+        // (delivered by the mutator only at `is_first`).
+        assert!(Generator::<SmallRng>::requires_metadata(
+            &PredicateTxGenerator::any()
+        ));
+        // The pool-based generators fund from in-program UTXOs; they don't need metadata and
+        // instead anchor their insertion after a UTXO-defining instruction via `choose_index`,
+        // so they can run at any position (e.g. after a `TxoGenerator`-produced `LoadTxo`).
+        assert!(!Generator::<SmallRng>::requires_metadata(&SingleTxGenerator));
+        assert!(!Generator::<SmallRng>::requires_metadata(
+            &OneParentOneChildGenerator
+        ));
+        assert!(!Generator::<SmallRng>::requires_metadata(
+            &LongChainGenerator
+        ));
+        assert!(!Generator::<SmallRng>::requires_metadata(&LargeTxGenerator));
+        // Coinbase is not a mempool tx and is intentionally ungated.
+        assert!(!Generator::<SmallRng>::requires_metadata(
+            &CoinbaseTxGenerator
+        ));
+    }
 }

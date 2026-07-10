@@ -329,10 +329,47 @@ pub struct GetBlockTxn {
     pub tx_indices_variables: Vec<usize>,
 }
 
+/// A spendable output of a fuzzer-built transaction, captured at compile time with everything
+/// needed to re-declare it as a `LoadTxo` (so it can fund a new tx at any mutation point, without
+/// depending on a program-relative variable index).
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct MempoolOutput {
+    pub outpoint: ([u8; 32], u32),
+    pub value: u64,
+    pub script_pubkey: Vec<u8>,
+    pub spending_script_sig: Vec<u8>,
+    pub spending_witness: Vec<Vec<u8>>,
+}
+
+/// A transaction currently in the node's mempool, together with the IR variable that defines its
+/// spendable output and the node-observed spend/dependency relationships. Populated by the probe
+/// stage from the real mempool of the snapshot execution, so generators can fund new transactions
+/// from outputs the node actually accepted (rather than IR-structural phantoms).
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct MempoolTxo {
+    pub txid: bitcoin::Txid,
+    /// `(variable_index, defining_instruction_index)` of the `Txo` variable in the compiled program.
+    pub definition: (usize, usize),
+    pub spentby: Vec<bitcoin::Txid>,
+    pub depends: Vec<bitcoin::Txid>,
+    /// Spendable outputs of this mempool tx, for funding new txs via `LoadTxo`.
+    pub outputs: Vec<MempoolOutput>,
+}
+
+/// Holds the probed `MempoolTxo` list and the entry a generator has chosen to spend this mutation.
+#[derive(Debug, Clone, Default, serde::Serialize, serde::Deserialize)]
+pub struct TxoMetadata {
+    pub txo_entry: Vec<MempoolTxo>,
+    pub choice: Option<usize>,
+}
+
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub enum ProbeResult {
     GetBlockTxn {
         get_block_txn: GetBlockTxn,
+    },
+    Mempool {
+        txo_entry: Vec<MempoolTxo>,
     },
     Failure {
         /// The command that failed to be decoded

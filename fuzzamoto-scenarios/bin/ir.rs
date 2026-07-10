@@ -37,7 +37,7 @@ use fuzzamoto::oracles::{NetSplitContext, NetSplitOracle};
 use fuzzamoto::oracles::{ConsensusContext, ConsensusOracle};
 
 use fuzzamoto_ir::{
-    ProbeResult, ProbeResults, Program, ProgramContext, RecentBlock,
+    MempoolTxo, ProbeResult, ProbeResults, Program, ProgramContext, RecentBlock,
     compiler::{CompiledAction, CompiledMetadata, CompiledProgram, Compiler},
 };
 
@@ -488,6 +488,43 @@ pub fn probe_recent_block_hashes<T: HasBlockChainInterface>(
     Some(ProbeResult::RecentBlockes { result })
 }
 
+/// Query the node's current mempool and map each transaction back to the IR `Txo` variable that
+/// defines it (via its txid), producing `MempoolTxo` entries the generators can fund from. Only
+/// transactions whose txid resolves to a known variable are included; the node's mempool contains
+/// only transactions the fuzzer sent, so this resolves for txs built via `EndBuildTx`.
+pub fn probe_mempool<T: HasBlockChainInterface>(
+    target: &T,
+    meta: &CompiledMetadata,
+) -> Option<ProbeResult> {
+    let mempool = target.get_mempool_entries().ok()?;
+
+    let total = mempool.len();
+    let mut txo_entry = Vec::new();
+    let mut unresolved = 0usize;
+    for tx in &mempool {
+        let txid = *tx.txid();
+        let outputs = meta.tx_outputs(txid).cloned().unwrap_or_default();
+        if outputs.is_empty() {
+            unresolved += 1;
+            continue;
+        }
+        txo_entry.push(MempoolTxo {
+            txid,
+            definition: (0, 0),
+            spentby: tx.spentby().to_vec(),
+            depends: tx.depends().to_vec(),
+            outputs,
+        });
+    }
+
+    log::info!(
+        "[gate-dbg] probe_mempool: node mempool={total} tx, resolved={} unresolved={unresolved} (unresolved = no recorded outputs)",
+        txo_entry.len()
+    );
+
+    Some(ProbeResult::Mempool { txo_entry })
+}
+
 impl<TX, T> Scenario<'_, TestCase> for IrScenario<TX, T>
 where
     TX: Transport,
@@ -531,6 +568,17 @@ where
             && let Some(ret) = probe_recent_block_hashes(&self.inner.target, &metadata)
         {
             self.probe_results.push(ret);
+        }
+
+        if self.recording_received_messages
+            && let Some(ret) = probe_mempool(&self.inner.target, &metadata)
+        {
+            self.probe_results.push(ret);
+        } else {
+            log::info!(
+                "[gate-dbg] run(): probe_mempool NOT recorded (recording={})",
+                self.recording_received_messages
+            );
         }
 
         self.print_received();

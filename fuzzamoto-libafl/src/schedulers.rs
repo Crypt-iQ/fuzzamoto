@@ -17,7 +17,7 @@ impl<I, Q, S, M> RemovableScheduler<I, S> for SupportedSchedulers<Q, M>
 where
     Q: Scheduler<I, S> + RemovableScheduler<I, S>,
     M: Scheduler<I, S> + RemovableScheduler<I, S>,
-    S: HasTestcase<I>,
+    S: HasTestcase<I> + HasMetadata,
 {
     fn on_remove(
         &mut self,
@@ -25,6 +25,9 @@ where
         id: CorpusId,
         testcase: &Option<Testcase<I>>,
     ) -> Result<(), Error> {
+        if let Ok(meta) = state.metadata_mut::<crate::stages::RuntimeMetadata>() {
+            meta.remove_metadata(id);
+        }
         match self {
             Self::Queue(queue, _) => queue.on_remove(state, id, testcase),
             Self::LenTimeMinimizer(minimizer, _) => minimizer.on_remove(state, id, testcase),
@@ -32,6 +35,9 @@ where
     }
 
     fn on_replace(&mut self, state: &mut S, id: CorpusId, prev: &Testcase<I>) -> Result<(), Error> {
+        if let Ok(meta) = state.metadata_mut::<crate::stages::RuntimeMetadata>() {
+            meta.remove_metadata(id);
+        }
         match self {
             Self::Queue(queue, _) => queue.on_replace(state, id, prev),
             Self::LenTimeMinimizer(minimizer, _) => minimizer.on_replace(state, id, prev),
