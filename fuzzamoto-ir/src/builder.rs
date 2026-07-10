@@ -159,9 +159,9 @@ impl ProgramBuilder {
             active_scopes: Vec::new(),
             active_scopes_set: HashSet::new(),
             scope_counter: 0usize,
-            variables: Vec::with_capacity(4096),
-            instructions: Vec::with_capacity(4096),
-            contexts: Vec::with_capacity(4096),
+            variables: Vec::with_capacity(40960),
+            instructions: Vec::with_capacity(40960),
+            contexts: Vec::with_capacity(40960),
         };
 
         // Enter outer/global scope of the program (never exited)

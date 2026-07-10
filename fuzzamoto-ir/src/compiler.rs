@@ -534,9 +534,9 @@ impl Compiler {
         Self {
             // TODO: make this deterministic
             secp_ctx: Secp256k1::new(),
-            variables: Vec::with_capacity(4096),
+            variables: Vec::with_capacity(40960),
             output: CompiledProgram {
-                actions: Vec::with_capacity(4096),
+                actions: Vec::with_capacity(40960),
                 metadata: CompiledMetadata::new(),
             },
             connection_counter: 0,
