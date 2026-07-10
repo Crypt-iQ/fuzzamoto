@@ -137,7 +137,7 @@ Can you-"
             .get_mempool_info()
             .map_err(|e| format!("Failed to get mempool info: {e:?}"))?;
         assert_sometimes!(cond: mempool_info.size > 0, "Mempool is not empty");
-        assert_sometimes!(gt: mempool_info.size, 100, "Mempool has more than 100 transactions");
+        assert_sometimes!(gt: mempool_info.size, 1000, "Mempool has more than 1000 transactions");
 
         Ok(())
     }
