@@ -66,6 +66,8 @@ pub enum CompiledAction {
     /// Set mock time for all nodes in the test
     SetTime(u64),
     Probe,
+    /// Take an incremental snapshot
+    IncrementalSnapshot,
 }
 
 #[derive(serde::Serialize, serde::Deserialize, Debug, Clone)]
@@ -90,6 +92,10 @@ pub struct CompiledMetadata {
     action_indices: Vec<InstructionIndex>,
     // A vector representing where each variable is defined.
     variable_indices: Vec<InstructionIndex>,
+    // Map from a transaction's txid to the variable index of a `Txo` it produces (via TakeTxo).
+    txo_var_map: HashMap<Txid, Vec<VariableIndex>>,
+    // Map from a transaction's txid to its spendable outputs (for funding via LoadTxo).
+    tx_output_map: HashMap<Txid, Vec<crate::MempoolOutput>>,
     /// The number of non-probe instructions compiled
     instructions: usize,
 }
@@ -108,6 +114,8 @@ impl CompiledMetadata {
             connection_map: HashMap::new(),
             action_indices: Vec::new(),
             variable_indices: Vec::new(),
+            txo_var_map: HashMap::new(),
+            tx_output_map: HashMap::new(),
             instructions: 0,
         }
     }
@@ -151,6 +159,18 @@ impl CompiledMetadata {
     #[must_use]
     pub fn connection_map(&self) -> &HashMap<ConnectionId, VariableIndex> {
         &self.connection_map
+    }
+
+    /// Look up the variable index of a `Txo` produced by the transaction with the given `txid`.
+    #[must_use]
+    pub fn txo_variables(&self, txid: Txid) -> Option<&Vec<VariableIndex>> {
+        self.txo_var_map.get(&txid)
+    }
+
+    /// Spendable outputs of a fuzzer-built transaction, by txid.
+    #[must_use]
+    pub fn tx_outputs(&self, txid: Txid) -> Option<&Vec<crate::MempoolOutput>> {
+        self.tx_output_map.get(&txid)
     }
 }
 
@@ -408,6 +428,12 @@ impl Compiler {
                 | Operation::AddAddr
                 | Operation::AddAddrV2 => {
                     self.handle_addr_operations(instruction)?;
+                }
+
+                Operation::IncrementalSnapshot => {
+                    self.output
+                        .actions
+                        .push(CompiledAction::IncrementalSnapshot);
                 }
 
                 Operation::BeginWitnessStack
@@ -1247,12 +1273,21 @@ impl Compiler {
             }
             Operation::TakeTxo | Operation::TakeCoinbaseTxo => {
                 let tx_var = self.get_input_mut::<Tx>(&instruction.inputs, 0)?;
+                let txid = tx_var.id;
                 let num_txos = tx_var.txos.len();
                 let mut txo = Txo::new();
                 if num_txos != 0 {
                     txo = tx_var.txos[tx_var.output_selector % num_txos].clone();
                     tx_var.output_selector += 1;
                 }
+
+                let txo_index = self.variables.len();
+                self.output
+                    .metadata
+                    .txo_var_map
+                    .entry(txid)
+                    .or_default()
+                    .push(txo_index);
 
                 self.append_variable(txo);
             }
@@ -2317,6 +2352,18 @@ impl Compiler {
             .collect();
 
         tx_var.id = txid;
+        let outputs: Vec<crate::MempoolOutput> = tx_var
+            .txos
+            .iter()
+            .map(|t| crate::MempoolOutput {
+                outpoint: t.prev_out,
+                value: t.value,
+                script_pubkey: t.scripts.script_pubkey.clone(),
+                spending_script_sig: t.scripts.script_sig.clone(),
+                spending_witness: t.scripts.witness.stack.clone(),
+            })
+            .collect();
+        self.output.metadata.tx_output_map.insert(txid, outputs);
         self.append_variable(tx_var);
 
         Ok(())

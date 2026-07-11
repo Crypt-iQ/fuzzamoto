@@ -31,8 +31,22 @@ fn grafting_header<R: RngCore>(
     if !meta.recent_blocks().is_empty() {
         // it is possible that chose.height == tip_height, but we accept it
         let chosen = &meta.recent_blocks()[rng.gen_range(0..meta.recent_blocks().len())];
-        Some((chosen.defining_block.0, tip_height - chosen.height + 1))
-    } else if !headers.is_empty() {
+        // Only trust the metadata-recorded variable index if it resolves to an in-scope `Header`
+        // in this builder (compiled-space indices can desync from builder space at a mutation
+        // insertion point; using a mismatched index makes `BuildBlock` panic). On mismatch, fall
+        // through to loading a fresh header from `headers` below.
+        if builder
+            .get_variable(chosen.defining_block.0)
+            .is_some_and(|v| matches!(v.var, Variable::Header))
+        {
+            return Some((
+                chosen.defining_block.0,
+                tip_height - chosen.height + 1,
+            ));
+        }
+    }
+
+    if !headers.is_empty() {
         let header = &headers[rng.gen_range(0..headers.len())];
         let var = builder
             .append(Instruction {
@@ -64,8 +78,17 @@ fn tip_header(
     let meta = meta.as_ref()?;
     let nth = meta.recent_blocks.iter().max();
 
-    if let Some(nth) = nth {
-        let (var, _inst) = nth.defining_block;
+    if let Some(nth) = nth
+        && let (var, _inst) = nth.defining_block
+        && builder
+            .get_variable(var)
+            .is_some_and(|v| matches!(v.var, Variable::Header))
+    {
+        // Only use the metadata-recorded index if it actually resolves to an in-scope `Header` in
+        // this builder. The index is captured in compiled-program variable space, which can desync
+        // from the builder's space at a mutation insertion point; using it blindly makes
+        // `BuildBlock` panic with `InvalidVariableType`. On mismatch, fall through to loading a
+        // fresh header below.
         Some(var)
     } else if let Some(header) = header {
         let var = builder
@@ -228,7 +251,7 @@ impl<R: RngCore> Generator<R> for TipBlockGenerator {
         &self,
         program: &crate::Program,
         rng: &mut R,
-        meta: Option<&PerTestcaseMetadata>,
+        meta: Option<&mut PerTestcaseMetadata>,
     ) -> Option<usize> {
         if let Some(meta) = meta.as_ref()
             && let Some(nth) = meta.recent_blocks.iter().max()
@@ -291,7 +314,7 @@ impl<R: RngCore> Generator<R> for ReorgBlockGenerator {
         &self,
         program: &crate::Program,
         rng: &mut R,
-        meta: Option<&PerTestcaseMetadata>,
+        meta: Option<&mut PerTestcaseMetadata>,
     ) -> Option<usize> {
         if let Some(meta) = meta.as_ref()
             && let Some(max) = meta.recent_blocks.iter().max_by_key(|i| i.defining_block.1)

@@ -46,6 +46,19 @@ impl RuntimeMetadata {
         self.metadatas.get_mut(&id)
     }
 
+    /// Number of probed mempool transactions recorded for a corpus entry (0 if none).
+    pub fn mempool_tx_count(&self, id: CorpusId) -> Option<usize> {
+        self.metadatas
+            .get(&id)
+            .map(|m| m.txo_metadata().txo_entry.len())
+    }
+
+    /// Drop stored metadata for a corpus entry that has been removed/replaced, so `metadatas`
+    /// doesn't grow unboundedly as the corpus churns.
+    pub fn remove_metadata(&mut self, id: CorpusId) {
+        self.metadatas.remove(&id);
+    }
+
     pub fn increment_idx(&mut self) {
         self.mutation_idx += 1;
     }
@@ -75,6 +88,25 @@ where
                 {
                     let txvec = meta.metadatas.entry(cur).or_default();
                     txvec.add_block_tx_request(get_block_txn.clone());
+                }
+            }
+            ProbeResult::Mempool { txo_entry } => {
+                let current = *state.corpus().current();
+                if let Some(cur) = current {
+                    if let Ok(meta) = state.metadata_mut::<RuntimeMetadata>() {
+                        let txvec = meta.metadatas.entry(cur).or_default();
+                        txvec.add_txo_entry(txo_entry.clone());
+                    }
+                    // Attach the mempool size to the testcase so the scheduler can favour
+                    // corpus entries that produce larger mempools.
+                    if let Ok(tc) = state.corpus().get(cur) {
+                        tc.borrow_mut()
+                            .add_metadata(MempoolSizeMetadata(txo_entry.len()));
+                    }
+                    log::info!(
+                        "[gate-dbg] process_probe_results: stored {} mempool txos for corpus {cur:?}",
+                        txo_entry.len()
+                    );
                 }
             }
             ProbeResult::Failure { command, reason } => {
@@ -196,5 +228,37 @@ impl<S, T> Restartable<S> for ProbingStage<T> {
 
     fn clear_progress(&mut self, _state: &mut S) -> Result<(), libafl::Error> {
         Ok(())
+    }
+}
+
+/// Testcase metadata recording how many mempool transactions this input produced (attached by the
+/// probing stage). Used by `MempoolWeightTestcaseScore` to bias scheduling toward inputs that grow
+/// the mempool.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct MempoolSizeMetadata(pub usize);
+
+impl_serdeany!(MempoolSizeMetadata);
+
+/// A `TestcaseScore` that starts from the standard corpus weight and multiplies it by a factor
+/// that grows with the input's recorded mempool size, so larger-mempool inputs are scheduled more.
+#[derive(Debug, Clone)]
+pub struct MempoolWeightTestcaseScore;
+
+impl<I, S> libafl::schedulers::testcase_score::TestcaseScore<I, S> for MempoolWeightTestcaseScore
+where
+    S: libafl::HasMetadata + libafl::state::HasCorpus<I>,
+{
+    fn compute(
+        state: &S,
+        entry: &mut libafl::corpus::Testcase<I>,
+    ) -> Result<f64, libafl::Error> {
+        let base = <libafl::schedulers::testcase_score::CorpusWeightTestcaseScore as libafl::schedulers::testcase_score::TestcaseScore<I, S>>::compute(state, entry)?;
+        let mempool = entry
+            .metadata::<MempoolSizeMetadata>()
+            .map(|m| m.0)
+            .unwrap_or(0);
+        // Linear boost: each mempool tx adds 5% to the base weight. Tune as needed.
+        let factor = 1.0 + 0.05 * (mempool as f64);
+        Ok(base * factor)
     }
 }

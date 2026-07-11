@@ -54,6 +54,18 @@ pub trait Generator<R: RngCore> {
     /// Name of the generator
     fn name(&self) -> &'static str;
 
+    /// Whether this generator should only run as the first sub-mutation of a scheduled mutation
+    /// stack (`idx == 0`), i.e. when runtime metadata is available and no prior sub-mutation has
+    /// modified the program this step. Transaction-producing generators return `true` so that a
+    /// later sub-mutation cannot invalidate the outputs/ordering they rely on. The gate is applied
+    /// by the `IrGenerator` mutator, which is the only place the sub-mutation index is known.
+    ///
+    /// Note: this does not affect CLI seed generation, which drives generators directly rather
+    /// than through the mutator.
+    fn requires_metadata(&self) -> bool {
+        false
+    }
+
     /// `InstructionContext` the generator expects to generate code in
     fn requested_context(&self) -> InstructionContext {
         InstructionContext::Global
@@ -68,7 +80,7 @@ pub trait Generator<R: RngCore> {
         &self,
         program: &Program,
         rng: &mut R,
-        _meta: Option<&PerTestcaseMetadata>,
+        _meta: Option<&mut PerTestcaseMetadata>,
     ) -> Option<usize> {
         program.get_random_instruction_index(rng, &self.requested_context())
     }

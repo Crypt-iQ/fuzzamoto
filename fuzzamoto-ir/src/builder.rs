@@ -634,6 +634,67 @@ impl ProgramBuilder {
     }
 
     /// Get a random set of unspend transaction outputs
+    /// Return unspent, in-scope UTXO variable indices that originate from a `LoadTxo` instruction
+    /// (seed coinbase outputs), excluding `TakeTxo` outputs of transactions the program built.
+    ///
+    /// `get_random_utxos` treats every `LoadTxo` and `TakeTxo` output as spendable, but a `TakeTxo`
+    /// output is only truly spendable if the node accepted its parent transaction; outputs of
+    /// rejected transactions become "phantom" UTXOs. `LoadTxo` outputs have no such ambiguity.
+    /// Count all in-scope spendable txos (both `LoadTxo` and `TakeTxo` origin). Diagnostic helper.
+    pub fn count_all_utxos(&self) -> usize {
+        let mut utxos = HashSet::new();
+        let mut var_count = 0;
+        for instruction in &self.instructions {
+            match instruction.operation {
+                Operation::TakeTxo | Operation::LoadTxo { .. } => {
+                    utxos.insert(var_count);
+                }
+                Operation::AddTxInput => {
+                    utxos.remove(&instruction.inputs[1]);
+                }
+                _ => {}
+            }
+            var_count += instruction.operation.num_outputs();
+            var_count += instruction.operation.num_inner_outputs();
+        }
+        utxos
+            .into_iter()
+            .filter(|i| self.is_variable_in_scope(*i))
+            .count()
+    }
+
+    pub fn get_unspent_loadtxo_indices(&self) -> Vec<usize> {
+        let mut utxos = HashSet::new();
+        let mut loadtxo = HashSet::new();
+
+        let mut var_count = 0;
+        for instruction in &self.instructions {
+            match instruction.operation {
+                Operation::LoadTxo { .. } => {
+                    utxos.insert(var_count);
+                    loadtxo.insert(var_count);
+                }
+                Operation::TakeTxo => {
+                    utxos.insert(var_count);
+                }
+                Operation::AddTxInput => {
+                    let spent = instruction.inputs[1];
+                    utxos.remove(&spent);
+                    loadtxo.remove(&spent);
+                }
+                _ => {}
+            }
+
+            var_count += instruction.operation.num_outputs();
+            var_count += instruction.operation.num_inner_outputs();
+        }
+
+        loadtxo
+            .into_iter()
+            .filter(|index| utxos.contains(index) && self.is_variable_in_scope(*index))
+            .collect()
+    }
+
     pub fn get_random_utxos<R: RngCore>(&self, rng: &mut R) -> Vec<IndexedVariable> {
         let mut utxos = HashSet::new();
 
@@ -655,6 +716,7 @@ impl ProgramBuilder {
             var_count += instruction.operation.num_inner_outputs();
         }
 
+        let pre_scope = utxos.len();
         let all_utxos = utxos
             .iter()
             .filter(|index| self.is_variable_in_scope(**index))
@@ -665,6 +727,10 @@ impl ProgramBuilder {
             });
 
         let num_utxos = all_utxos.clone().count();
+        log::debug!(
+            "[gate-dbg] get_random_utxos: {pre_scope} candidate txos, {num_utxos} in-scope (instrs={})",
+            self.instructions.len()
+        );
         if num_utxos == 0 {
             return Vec::new();
         }

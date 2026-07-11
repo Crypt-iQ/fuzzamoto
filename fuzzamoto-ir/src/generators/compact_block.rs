@@ -109,7 +109,7 @@ impl<R: RngCore> Generator<R> for CompactBlockGenerator {
         &self,
         program: &crate::Program,
         rng: &mut R,
-        _meta: Option<&PerTestcaseMetadata>,
+        _meta: Option<&mut PerTestcaseMetadata>,
     ) -> Option<usize> {
         // Collect valid insertion ranges: after BuildBlock but at or before the corresponding
         // SendBlock, so the compact block is sent before the full block for the same block.

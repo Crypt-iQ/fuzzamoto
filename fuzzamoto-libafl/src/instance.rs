@@ -6,8 +6,8 @@ use fuzzamoto_ir::{
     BloomFilterClearGenerator, BloomFilterLoadGenerator, CombineMutator, CompactBlockGenerator,
     CompactFilterQueryGenerator, GetAddrGenerator, GetDataGenerator, HeaderGenerator, InputMutator,
     InventoryGenerator, LargeTxGenerator, LongChainGenerator, OneParentOneChildGenerator,
-    OperationMutator, Program, ReorgBlockGenerator, SendBlockGenerator, SendMessageGenerator,
-    SingleTxGenerator, TipBlockGenerator, TxoGenerator, WitnessGenerator,
+    OperationMutator, PredicateTxGenerator, Program, ReorgBlockGenerator, SendBlockGenerator,
+    SendMessageGenerator, SingleTxGenerator, TipBlockGenerator, TxoGenerator, WitnessGenerator,
     cutting::CuttingMinimizer, instr_block::InstrBlockMinimizer, nopping::NoppingMinimizer,
 };
 
@@ -25,7 +25,7 @@ use libafl::{
     mutators::{ComposedByMutations, TuneableScheduledMutator},
     observers::{CanTrack, HitcountsMapObserver, StdMapObserver, StdOutObserver, TimeObserver},
     schedulers::{
-        IndexesLenTimeMinimizerScheduler, QueueScheduler, StdWeightedScheduler,
+        IndexesLenTimeMinimizerScheduler, QueueScheduler, WeightedScheduler,
         powersched::PowerSchedule,
     },
     stages::{ClosureStage, IfStage, StagesTuple, TuneableMutationalStage, WhileStage},
@@ -48,10 +48,13 @@ use typed_builder::TypedBuilder;
 use crate::{
     feedbacks::{CaptureTimeoutFeedback, CrashCauseFeedback, assertions::AssertionFeedback},
     input::IrInput,
-    mutators::{IrGenerator, IrMutator, IrSpliceMutator, LibAflByteMutator},
+    mutators::{IrGenerator, IrMutator, IrSpliceMutator, LibAflByteMutator, StackResetMutator},
     options::FuzzerOptions,
     schedulers::SupportedSchedulers,
-    stages::{IrMinimizerStage, ProbingStage, StabilityCheckStage, VerifyTimeoutsStage},
+    stages::{
+        IncrementalSnapshotStage, IrMinimizerStage, ProbingStage, SnapshotPlacementPolicy,
+        StabilityCheckStage, VerifyTimeoutsStage,
+    },
 };
 
 #[cfg(feature = "bench")]
@@ -262,7 +265,7 @@ where
             SupportedSchedulers::LenTimeMinimizer(
                 IndexesLenTimeMinimizerScheduler::new(
                     &trace_observer,
-                    StdWeightedScheduler::with_schedule(
+                    WeightedScheduler::<_, crate::stages::MempoolWeightTestcaseScore, _>::with_schedule(
                         &mut state,
                         &trace_observer,
                         Some(PowerSchedule::explore()),
@@ -333,9 +336,9 @@ where
         let (mutations, weights) = weighted_mutations![
             self.options,
             &mut swarm_rng,
-            (2000.0, IrMutator::new(InputMutator::new(), rng.clone())),
+            (300.0, IrMutator::new(InputMutator::new(), rng.clone())),
             (
-                1000.0,
+                200.0,
                 IrMutator::new(OperationMutator::new(LibAflByteMutator::new()), rng.clone())
             ),
             (
@@ -364,11 +367,23 @@ where
                 40.0,
                 IrGenerator::new(SendMessageGenerator::default(), rng.clone())
             ),
-            (50.0, IrGenerator::new(SingleTxGenerator, rng.clone())),
-            (50.0, IrGenerator::new(LongChainGenerator, rng.clone())),
-            (50.0, IrGenerator::new(LargeTxGenerator, rng.clone())),
+            (500.0, IrGenerator::new(SingleTxGenerator, rng.clone())),
+            (500.0, IrGenerator::new(LongChainGenerator, rng.clone())),
+            (500.0, IrGenerator::new(LargeTxGenerator, rng.clone())),
             (
-                50.0,
+                800.0,
+                IrGenerator::new(PredicateTxGenerator::chain_spend(), rng.clone())
+            ),
+            (
+                400.0,
+                IrGenerator::new(PredicateTxGenerator::any(), rng.clone())
+            ),
+            (
+                20.0,
+                IrGenerator::new(PredicateTxGenerator::double_spend(), rng.clone())
+            ),
+            (
+                500.0,
                 IrGenerator::new(OneParentOneChildGenerator, rng.clone())
             ),
             (
@@ -457,7 +472,7 @@ where
             .set_iter_probabilities_pow(&mut state, vec![0.025f32, 0.1, 0.4, 0.3, 0.1, 0.05, 0.025])
             .unwrap();
 
-        let mutator = tuneable_mutator;
+        let mutator = StackResetMutator::new(tuneable_mutator);
 
         let minimizing_crash = self.options.minimize_input.is_some();
 
@@ -466,6 +481,17 @@ where
 
         let probing = ProbingStage::new(&stdout_observer_handle);
         let stability = StabilityCheckStage::new(&map_observer_handle, &map_feedback_name, 8);
+
+        let mutation_stage = TuneableMutationalStage::new(&mut state, mutator);
+
+        let incremental_snapshot_stage = IncrementalSnapshotStage::new(
+            self.options.incremental_snapshots,
+            mutation_stage,
+            SnapshotPlacementPolicy::LateBiased,
+            50,
+            50,
+        );
+
         let mut stages = tuple_list!(
             ClosureStage::new(|_a: &mut _, _b: &mut _, _c: &mut _, _d: &mut _| {
                 // Always try minimizing at least for one pass
@@ -509,7 +535,7 @@ where
                 tuple_list!(
                     stability,
                     probing,
-                    TuneableMutationalStage::new(&mut state, mutator),
+                    incremental_snapshot_stage,
                     timeout_verify_stage,
                     bench_stats_stage,
                 )

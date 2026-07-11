@@ -12,6 +12,7 @@ use fuzzamoto::{
     connections::Transport,
     fuzzamoto_main,
     oracles::{CrashOracle, Oracle, OracleResult},
+    runners::Runner,
     scenarios::{Scenario, ScenarioInput, ScenarioResult, generic::GenericScenario},
     targets::{
         BitcoinCoreTarget, ConnectableTarget, GenerateToAddress, HasBlockChainInterface, Target,
@@ -37,7 +38,7 @@ use fuzzamoto::oracles::{NetSplitContext, NetSplitOracle};
 use fuzzamoto::oracles::{ConsensusContext, ConsensusOracle};
 
 use fuzzamoto_ir::{
-    ProbeResult, ProbeResults, Program, ProgramContext, RecentBlock,
+    MempoolTxo, ProbeResult, ProbeResults, Program, ProgramContext, RecentBlock,
     compiler::{CompiledAction, CompiledMetadata, CompiledProgram, Compiler},
 };
 
@@ -277,10 +278,15 @@ where
         Ok(())
     }
 
-    fn process_actions(&mut self, mut program: CompiledProgram) {
+    fn process_actions(
+        &mut self,
+        program: CompiledProgram,
+        start_index: usize,
+        runner: &dyn Runner,
+    ) -> Option<(Vec<u8>, usize)> {
         let message_filter = |(s, _): &(String, Vec<u8>)| ["getblocktxn"].contains(&s.as_str());
         let mut non_probe_action_count = 0;
-        for action in program.actions.drain(..) {
+        for (i, action) in program.actions.into_iter().enumerate().skip(start_index) {
             match action {
                 CompiledAction::Connect(_node, connection_type) => {
                     let conn_type = match connection_type.as_str() {
@@ -339,7 +345,7 @@ where
                 }
                 CompiledAction::SendRawMessage(from, command, message) => {
                     if self.inner.connections.is_empty() {
-                        return;
+                        return None;
                     }
 
                     let num_connections = self.inner.connections.len();
@@ -380,8 +386,17 @@ where
 
                     self.futurest = std::cmp::max(self.futurest, time);
                 }
+                CompiledAction::IncrementalSnapshot => {
+                    // If we're creating a new incremental snapshot, we want to save the index to skip
+                    // ahead to.
+                    let prefix_index = i + 1;
+                    let (new_payload, action_pos) =
+                        runner.create_incremental_and_next(prefix_index);
+                    return Some((new_payload, action_pos));
+                }
             }
         }
+        None
     }
 
     fn print_received(&mut self) {
@@ -488,6 +503,43 @@ pub fn probe_recent_block_hashes<T: HasBlockChainInterface>(
     Some(ProbeResult::RecentBlockes { result })
 }
 
+/// Query the node's current mempool and map each transaction back to the IR `Txo` variable that
+/// defines it (via its txid), producing `MempoolTxo` entries the generators can fund from. Only
+/// transactions whose txid resolves to a known variable are included; the node's mempool contains
+/// only transactions the fuzzer sent, so this resolves for txs built via `EndBuildTx`.
+pub fn probe_mempool<T: HasBlockChainInterface>(
+    target: &T,
+    meta: &CompiledMetadata,
+) -> Option<ProbeResult> {
+    let mempool = target.get_mempool_entries().ok()?;
+
+    let total = mempool.len();
+    let mut txo_entry = Vec::new();
+    let mut unresolved = 0usize;
+    for tx in &mempool {
+        let txid = *tx.txid();
+        let outputs = meta.tx_outputs(txid).cloned().unwrap_or_default();
+        if outputs.is_empty() {
+            unresolved += 1;
+            continue;
+        }
+        txo_entry.push(MempoolTxo {
+            txid,
+            definition: (0, 0),
+            spentby: tx.spentby().to_vec(),
+            depends: tx.depends().to_vec(),
+            outputs,
+        });
+    }
+
+    log::info!(
+        "[gate-dbg] probe_mempool: node mempool={total} tx, resolved={} unresolved={unresolved} (unresolved = no recorded outputs)",
+        txo_entry.len()
+    );
+
+    Some(ProbeResult::Mempool { txo_entry })
+}
+
 impl<TX, T> Scenario<'_, TestCase> for IrScenario<TX, T>
 where
     TX: Transport,
@@ -520,17 +572,49 @@ where
         })
     }
 
-    fn run(&mut self, testcase: TestCase) -> ScenarioResult {
+    fn run(&mut self, testcase: TestCase, runner: &dyn Runner) -> ScenarioResult {
         assert_always!(cond: true, "IR scenario executes");
 
         let metadata = testcase.program.metadata.clone();
-        self.process_actions(testcase.program);
+        let mut program = testcase.program;
+        let mut start_index = 0;
+
+        while let Some((new_payload, action_pos)) =
+            self.process_actions(program, start_index, runner)
+        {
+            let new_testcase = match TestCase::decode(&new_payload) {
+                Ok(tc) => tc,
+                Err(e) => {
+                    log::warn!(
+                        "Failed to decode new payload after creating incremental snapshot: {e}",
+                    );
+                    runner.skip();
+                    return ScenarioResult::Skip;
+                }
+            };
+
+            // Resume just after the snapshot prefix.
+            program = new_testcase.program;
+            start_index = action_pos;
+        }
+
         self.ping_connections();
 
         if self.recording_received_messages
             && let Some(ret) = probe_recent_block_hashes(&self.inner.target, &metadata)
         {
             self.probe_results.push(ret);
+        }
+
+        if self.recording_received_messages
+            && let Some(ret) = probe_mempool(&self.inner.target, &metadata)
+        {
+            self.probe_results.push(ret);
+        } else {
+            log::info!(
+                "[gate-dbg] run(): probe_mempool NOT recorded (recording={})",
+                self.recording_received_messages
+            );
         }
 
         self.print_received();
