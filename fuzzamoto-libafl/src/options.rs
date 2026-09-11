@@ -31,7 +31,23 @@ pub struct FuzzerOptions {
     #[arg(short, long, help = "Output directory")]
     pub output: String,
 
+    /// The Nyx share directory built by `fuzzamoto-cli init`: it holds the
+    /// target binary, the scenario, the crash handler and Nyx's packer config.
+    /// Required by the Nyx backend.
+    #[cfg(feature = "nyx")]
     #[arg(short, long, help = "Shared directory")]
+    pub share: String,
+
+    /// Bedrock has no share directory — the guest initramfs carries the target
+    /// and the scenario, and `--vmlinux`/`--initramfs` say where it is. Kept
+    /// only so scripts written for the Nyx backend still parse; ignored.
+    #[cfg(feature = "bedrock")]
+    #[arg(
+        short,
+        long,
+        help = "Shared directory (unused by the bedrock backend)",
+        default_value = ""
+    )]
     pub share: String,
 
     #[arg(short, long, help = "Input buffer size", default_value_t = 8388608)]
@@ -39,6 +55,30 @@ pub struct FuzzerOptions {
 
     #[arg(long, help = "Log file")]
     pub log: Option<String>,
+
+    /// Bedrock backend: the guest kernel to boot. Unused by the Nyx backend,
+    /// which gets everything from the share directory.
+    #[cfg(feature = "bedrock")]
+    #[arg(long, help = "Bedrock: path to the guest vmlinux ELF")]
+    pub vmlinux: Option<String>,
+
+    /// Bedrock backend: the guest image holding the scenario and its target.
+    #[cfg(feature = "bedrock")]
+    #[arg(long, help = "Bedrock: path to the guest initramfs")]
+    pub initramfs: Option<String>,
+
+    /// Bedrock backend: guest RAM. Must fit the initramfs, the target, and the
+    /// scenario's datadir tmpfs.
+    #[cfg(feature = "bedrock")]
+    #[arg(long, help = "Bedrock: guest memory in MB", default_value_t = 8192)]
+    pub guest_memory_mb: usize,
+
+    /// Bedrock backend: virtual seconds allowed for the scenario's one-time
+    /// setup (spawning the target, mining a chain) before its first input
+    /// request. Paid once per campaign, not per test case.
+    #[cfg(feature = "bedrock")]
+    #[arg(long, help = "Bedrock: setup timeout in seconds", default_value_t = 120)]
+    pub setup_timeout: u64,
 
     #[arg(long, help = "Timeout in milli-seconds", default_value = "1000")]
     pub timeout: u32,
@@ -181,6 +221,9 @@ impl FuzzerOptions {
         PathBuf::from(&self.input)
     }
 
+    /// The Nyx share directory built by `fuzzamoto-cli init`. The bedrock
+    /// backend boots a guest image instead and never reads this.
+    #[cfg(feature = "nyx")]
     pub fn shared_dir(&self) -> PathBuf {
         PathBuf::from(&self.share)
     }

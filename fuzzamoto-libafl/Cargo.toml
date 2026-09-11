@@ -7,8 +7,12 @@ license.workspace = true
 repository.workspace = true
 
 [features]
-default = ["std"]
+default = ["std", "nyx"]
 std = []
+
+# Snapshot-fuzzing backend. Exactly one must be enabled. `nyx` is the default;
+# selecting `bedrock` means QEMU-Nyx is never built, which is most of the build.
+nyx = ["dep:libafl_nyx"]
 
 fuzz = ["compile_in_vm"]
 reproduce = ["compile_in_vm"]
@@ -22,6 +26,11 @@ simplemgr = []
 compile_in_vm = []
 
 introspection = ["libafl/introspection"]
+
+# Fuzz on the bedrock hypervisor instead of Nyx. Needs the bedrock source tree
+# present:
+#   cargo build --no-default-features --features std,bedrock
+bedrock = ["dep:bedrock-lab", "dep:bedrock-vm", "compile_in_vm"]
 
 # Collect stats for benchmarking purposes
 bench = []
@@ -48,7 +57,10 @@ libafl = { git = "https://github.com/AFLplusplus/LibAFL.git", rev = "3b21190452d
 libafl_bolts = { git = "https://github.com/AFLplusplus/LibAFL.git", rev = "3b21190452d7289535aee443799ea55d940915c5", features = [
   "errors_backtrace",
 ] }
-libafl_nyx = { git = "https://github.com/AFLplusplus/LibAFL.git", rev = "3b21190452d7289535aee443799ea55d940915c5" }
+libafl_nyx = { git = "https://github.com/AFLplusplus/LibAFL.git", rev = "3b21190452d7289535aee443799ea55d940915c5", optional = true }
+
+bedrock-lab = { path = "../../bedrock/crates/bedrock-lab", optional = true }
+bedrock-vm = { path = "../../bedrock/crates/bedrock-vm", optional = true }
 
 log = { version = "0.4.20" }
 nix = { version = "0.30.1", features = ["fs"] }

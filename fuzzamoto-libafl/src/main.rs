@@ -1,4 +1,14 @@
 #[cfg(target_os = "linux")]
+#[cfg(all(feature = "nyx", feature = "bedrock"))]
+compile_error!(
+    "features `nyx` and `bedrock` are mutually exclusive: build with \
+     --no-default-features --features std,bedrock to select bedrock"
+);
+#[cfg(not(any(feature = "nyx", feature = "bedrock")))]
+compile_error!("one of the `nyx` or `bedrock` backend features must be enabled");
+
+#[cfg(feature = "bedrock")]
+mod bedrock;
 mod client;
 #[cfg(target_os = "linux")]
 mod feedbacks;

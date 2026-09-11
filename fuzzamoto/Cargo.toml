@@ -8,10 +8,13 @@ repository.workspace = true
 
 [features]
 fuzz = ["nyx", "reduced_pow"]
+# Fuzz on the bedrock hypervisor instead of Nyx. Mutually exclusive with `nyx`.
+fuzz_bedrock = ["bedrock", "reduced_pow"]
 reproduce = ["reduced_pow", "inherit_stdout"]
 
 inherit_stdout = []             # Inherit stdout from the fuzz target(s)
 nyx = ["dep:fuzzamoto-nyx-sys"] # Use the nyx runner
+bedrock = ["dep:fuzzamoto-bedrock-sys"] # Use the bedrock runner
 reduced_pow = []                # Use reduced POW for block generation
 coverage = []                   # Invokes patched signal handler in bitcoind
 
@@ -29,4 +32,5 @@ serde_json = "1.0.140"
 serde = { version = "1.0.197", features = ["derive"] }
 
 fuzzamoto-nyx-sys = { path = "../fuzzamoto-nyx-sys", optional = true }
+fuzzamoto-bedrock-sys = { path = "../fuzzamoto-bedrock-sys", optional = true }
 bip324 = "0.10.0"
