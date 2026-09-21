@@ -763,7 +763,7 @@ impl Operation {
     pub fn check_input_types(&self, variables: &[Variable]) -> Result<(), ProgramValidationError> {
         let check_expected =
             |got: &[Variable], expected: &[Variable]| -> Result<(), ProgramValidationError> {
-                assert!(self.num_inputs() == got.len());
+                assert_eq!(self.num_inputs(), got.len());
                 if got.len() != expected.len() {
                     return Err(ProgramValidationError::InvalidNumberOfInputs {
                         is: got.len(),

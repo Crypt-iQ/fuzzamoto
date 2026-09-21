@@ -6,7 +6,7 @@ fn get_map_size(binary: &PathBuf) -> Option<String> {
         &Command::new(binary)
             .env("AFL_DUMP_MAP_SIZE", "1")
             .output()
-            .unwrap_or_else(|_| panic!("Failed to execute {:?}", &binary.display()))
+            .unwrap_or_else(|_| panic!("Failed to execute {:?}", binary.display()))
             .stdout,
     )
     .trim()
