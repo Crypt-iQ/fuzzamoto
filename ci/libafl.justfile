@@ -58,11 +58,23 @@ clean:
 [working-directory: '/fuzzamoto']
 test: compile compile_nyx corpus
 	#!/bin/bash
-	timeout 16s sh -c './target/release/fuzzamoto-libafl --input /tmp/in/ --output /tmp/out/ --share /tmp/fuzzamoto_scenario-ir/ --cores 0 --verbose > stdout.log'
-	if grep -qa "corpus: 15" stdout.log; then
-		echo "Fuzzer is working"
-	else 
-		echo "Fuzzer does not generate enough testcases"
-		exit 1
-	fi
+	# Nested-virt runners boot the Nyx VM slowly, so poll for progress rather than using a
+	# fixed budget: pass as soon as the corpus reaches 15, fail after 180s.
+	./target/release/fuzzamoto-libafl --input /tmp/in/ --output /tmp/out/ --share /tmp/fuzzamoto_scenario-ir/ --cores 0 --verbose > stdout.log &
+	pid=$!
+	corpus=0
+	for _ in $(seq 180); do
+		corpus=$(grep -oaE 'corpus: [0-9]+' stdout.log | awk '{ if ($2 > m) m = $2 } END { print m + 0 }')
+		if [ "$corpus" -ge 15 ]; then
+			echo "Fuzzer is working (corpus: $corpus)"
+			kill "$pid"
+			exit 0
+		fi
+		kill -0 "$pid" 2>/dev/null || break
+		sleep 1
+	done
+	echo "Fuzzer does not generate enough testcases (corpus: $corpus)"
+	tail -n 50 stdout.log
+	kill "$pid" 2>/dev/null
+	exit 1
 	

@@ -10,33 +10,45 @@ on:
   pull_request:
     branches: [ master ]
 
+permissions:
+  contents: read
+
 jobs:
   build:
-    runs-on: [self-hosted]
+    # Both matrix jobs run the fuzzer itself (Nyx / `afl-fuzz -X`, which is also Nyx mode),
+    # so the runner needs KVM via nested-virt - see the "Enable KVM" step below. AWS supports
+    # nested virt on the 7i/8i Intel families at any size.
+    runs-on:
+      - runs-on=${{ github.run_id }}
+      - cpu=8+16
+      - family=c7i+m7i+r7i
+      - image=ubuntu22-full-x64
+      - nested-virt
+      - volume=120gb:gp3
+      - extras=ecr-cache # auto-login to the ephemeral ECR registry (layer cache)
     timeout-minutes: 150
     strategy:
       matrix:
         include:
-           # Enable this once we have more self-hosted runners
-           # - name: aflpp
-           #   context: .
-           #   file: ./Dockerfile
-           #   scenario-name: http-server
-           #   tag: fuzzamoto:ci
-           #   justfile-name: scenario-http-server.justfile
+           - name: aflpp
+             context: .
+             file: ./Dockerfile
+             scenario-name: http-server
+             tag: fuzzamoto:ci
+             justfile-name: scenario-http-server.justfile
+             cache-ref: aflpp-buildcache
+             corpus-dir: default/queue
            - name: libafl
              context: .
              file: ./Dockerfile.libafl
              scenario-name: ir
              tag: fuzzamoto-libafl:ci
              justfile-name: libafl.justfile
+             # Same Dockerfile as benchmark.yml's base image, so share its layer cache.
+             cache-ref: base-buildcache
+             corpus-dir: cpu_000/queue
 
     steps:
-      - name: Clean-up old files
-        run: |
-          rm -rf /output && rm -rf /corpus
-          docker rm -f $(docker ps -aq) 2>/dev/null || true
-          docker system prune -af --volumes
       - name: Checkout
         uses: actions/checkout@v4
 
@@ -52,19 +64,32 @@ jobs:
           load: true
           tags: ${{ matrix.tag }}
           platforms: linux/amd64
+          cache-from: type=registry,ref=${{ env.RUNS_ON_ECR_CACHE }}:${{ matrix.cache-ref }}
+          cache-to: type=registry,ref=${{ env.RUNS_ON_ECR_CACHE }}:${{ matrix.cache-ref }},mode=max
+      - name: Enable KVM vmware backdoor (required by Nyx)
+        run: |
+          sudo modprobe -r kvm_intel 2>/dev/null || true
+          sudo modprobe -r kvm 2>/dev/null || true
+          sudo modprobe kvm enable_vmware_backdoor=y
+          sudo modprobe kvm_intel
+          echo "enable_vmware_backdoor=$(cat /sys/module/kvm/parameters/enable_vmware_backdoor)"
+          test "$(cat /sys/module/kvm/parameters/enable_vmware_backdoor)" = "Y"
       - name: Run checks
+        # The runner user is non-root, so keep the mount dirs under runner.temp rather than /.
         run: |
-          rm -rf /output && mkdir /output
-          docker run --privileged -v ./:/fuzzamoto -v /corpus:/tmp/out ${{ matrix.tag }} just -f /ci/${{ matrix.justfile-name }} test
+          mkdir -p "$RUNNER_TEMP/output" "$RUNNER_TEMP/corpus"
+          docker run --privileged -v ./:/fuzzamoto -v "$RUNNER_TEMP/corpus:/tmp/out" ${{ matrix.tag }} just -f /ci/${{ matrix.justfile-name }} test
       - name: Build coverage image
-        run: |
-          docker build -t fuzzamoto-coverage -f Dockerfile.coverage .
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: ./Dockerfile.coverage
+          push: false
+          load: true
+          tags: fuzzamoto-coverage
+          platforms: linux/amd64
+          cache-from: type=registry,ref=${{ env.RUNS_ON_ECR_CACHE }}:coverage-buildcache
+          cache-to: type=registry,ref=${{ env.RUNS_ON_ECR_CACHE }}:coverage-buildcache,mode=max
       - name: Run coverage
         run: |
-          docker run --privileged -v /output:/mnt/output -v /corpus/cpu_000/queue:/mnt/corpus fuzzamoto-coverage /fuzzamoto/target/release/scenario-${{ matrix.scenario-name }} 
-      - name: Upload artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: coverage-artifact-${{ matrix.name }}
-          path: /output
-          retention-days: 1
+          docker run --privileged -v "$RUNNER_TEMP/output:/mnt/output" -v "$RUNNER_TEMP/corpus/${{ matrix.corpus-dir }}:/mnt/corpus" fuzzamoto-coverage /fuzzamoto/target/release/scenario-${{ matrix.scenario-name }}
