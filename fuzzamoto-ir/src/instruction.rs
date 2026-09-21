@@ -9,7 +9,7 @@ pub struct Instruction {
 impl Instruction {
     #[must_use]
     pub fn is_input_mutable(&self) -> bool {
-        assert!(self.inputs.len() == self.operation.num_inputs());
+        assert_eq!(self.inputs.len(), self.operation.num_inputs());
 
         match self.operation {
             Operation::EndBuildTx

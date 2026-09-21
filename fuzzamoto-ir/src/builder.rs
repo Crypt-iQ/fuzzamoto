@@ -378,7 +378,7 @@ impl ProgramBuilder {
         variable_threshold: usize,
         variable_offset: usize,
     ) -> Result<(), ProgramValidationError> {
-        assert!(program.context == self.context);
+        assert_eq!(program.context, self.context);
         self.instructions.reserve(program.instructions.len());
 
         let mapped_instructions = program.instructions.drain(..).map(|mut i| {
