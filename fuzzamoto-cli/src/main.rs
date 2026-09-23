@@ -54,6 +54,18 @@ enum Commands {
 
         #[arg(
             long,
+            help = "Path to the llvm symbolizer so sanitizer suppressions can be read"
+        )]
+        symbolizer_path: Option<PathBuf>,
+
+        #[arg(
+            long,
+            help = "Path to a sanitizer suppressions file that should be copied into the share directory"
+        )]
+        sanitizer_suppressions: Option<PathBuf>,
+
+        #[arg(
+            long,
             value_enum,
             default_value = "asan",
             help = "Sanitizer the target binaries were built with"
@@ -141,6 +153,8 @@ fn main() -> Result<()> {
             scenario,
             nyx_dir,
             rpc_path,
+            symbolizer_path,
+            sanitizer_suppressions,
             sanitizer,
         } => InitCommand::execute(
             sharedir,
@@ -150,6 +164,8 @@ fn main() -> Result<()> {
             scenario,
             nyx_dir,
             rpc_path.as_ref(),
+            symbolizer_path.as_ref(),
+            sanitizer_suppressions.as_ref(),
             *sanitizer,
         ),
         Commands::Coverage {
