@@ -44,6 +44,7 @@ pub fn generate_nyx_config(nyx_path: &Path, sharedir: &Path) -> Result<()> {
     Ok(())
 }
 
+#[allow(clippy::too_many_arguments)]
 pub fn create_nyx_script(
     sharedir: &Path,
     all_deps: &[String],
