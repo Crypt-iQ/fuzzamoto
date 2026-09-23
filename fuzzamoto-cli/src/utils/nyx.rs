@@ -52,6 +52,8 @@ pub fn create_nyx_script(
     scenario_name: &str,
     secondary_bitcoind: Option<&str>,
     rpc_path: Option<&str>,
+    symbolizer_name: Option<&str>,
+    sanitizer_suppressions: Option<&str>,
     sanitizer: Sanitizer,
 ) -> Result<()> {
     let mut script = vec![
@@ -71,6 +73,14 @@ pub fn create_nyx_script(
 
     if let Some(rpc_path) = rpc_path {
         script.push(format!("./hget {rpc_path} {rpc_path}"));
+    }
+
+    if let Some(symbolizer) = symbolizer_name {
+        script.push(format!("./hget {symbolizer} {symbolizer}"));
+    }
+
+    if let Some(suppressions) = sanitizer_suppressions {
+        script.push(format!("./hget {suppressions} {suppressions}"));
     }
 
     // Make executables
@@ -99,7 +109,7 @@ pub fn create_nyx_script(
     #[cfg(not(feature = "nyx_log"))]
     let secondary_log = "";
 
-    let sanitizer_options = match sanitizer {
+    let mut sanitizer_options = match sanitizer {
         Sanitizer::Asan => format!(
             "ASAN_OPTIONS={}",
             [
@@ -146,6 +156,18 @@ pub fn create_nyx_script(
             .join(":")
         ),
     };
+
+    // Symbolizer is required if suppressions are used.
+    if let Some(symbolizer) = symbolizer_name {
+        sanitizer_options.push_str(":symbolize=1:external_symbolizer_path=/tmp/");
+        sanitizer_options.push_str(symbolizer);
+    }
+
+    if let Some(suppressions) = sanitizer_suppressions {
+        sanitizer_options.push_str(":suppressions=");
+        sanitizer_options.push_str(suppressions);
+    }
+
     let crash_handler_preload = format!("LD_PRELOAD=./{crash_handler_name}");
     let proxy_script = format!(
         "{sanitizer_options} LD_LIBRARY_PATH=/tmp LD_BIND_NOW=1 {crash_handler_preload} ./bitcoind \\$@{primary_log}",
