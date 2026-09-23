@@ -3,7 +3,7 @@ mod error;
 mod utils;
 
 use clap::{Parser, Subcommand};
-use commands::{CoverageCommand, InitCommand, IrCommand, ir};
+use commands::{CoverageCommand, InitCommand, IrCommand, Sanitizer, ir};
 use error::Result;
 use std::path::PathBuf;
 
@@ -51,6 +51,14 @@ enum Commands {
             help = "Path to the file with the RPC commands that should be copied into the share directory"
         )]
         rpc_path: Option<PathBuf>,
+
+        #[arg(
+            long,
+            value_enum,
+            default_value = "asan",
+            help = "Sanitizer the target binaries were built with"
+        )]
+        sanitizer: Sanitizer,
     },
 
     /// Create a html coverage report for a given corpus
@@ -133,6 +141,7 @@ fn main() -> Result<()> {
             scenario,
             nyx_dir,
             rpc_path,
+            sanitizer,
         } => InitCommand::execute(
             sharedir,
             crash_handler,
@@ -141,6 +150,7 @@ fn main() -> Result<()> {
             scenario,
             nyx_dir,
             rpc_path.as_ref(),
+            *sanitizer,
         ),
         Commands::Coverage {
             output,

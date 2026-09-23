@@ -1,3 +1,4 @@
+use crate::commands::Sanitizer;
 use crate::error::Result;
 use crate::utils::process::run_command_with_status;
 use std::path::Path;
@@ -51,6 +52,7 @@ pub fn create_nyx_script(
     scenario_name: &str,
     secondary_bitcoind: Option<&str>,
     rpc_path: Option<&str>,
+    sanitizer: Sanitizer,
 ) -> Result<()> {
     let mut script = vec![
         "chmod +x hget".to_string(),
@@ -87,18 +89,6 @@ pub fn create_nyx_script(
     script.push("ip link set lo up".to_string());
     script.push("ip a | ./hcat".to_string());
 
-    // Create bitcoind proxy script
-    let asan_options = [
-        "detect_leaks=1",
-        "detect_stack_use_after_return=1",
-        "check_initialization_order=1",
-        "strict_init_order=1",
-        "log_path=/tmp/asan.log",
-        "abort_on_error=1",
-        "handle_abort=1",
-    ]
-    .join(":");
-
     #[cfg(feature = "nyx_log")]
     let primary_log = " > /tmp/primary.log 2>&1";
     #[cfg(not(feature = "nyx_log"))]
@@ -109,10 +99,56 @@ pub fn create_nyx_script(
     #[cfg(not(feature = "nyx_log"))]
     let secondary_log = "";
 
-    let asan_options = format!("ASAN_OPTIONS={asan_options}");
+    let sanitizer_options = match sanitizer {
+        Sanitizer::Asan => format!(
+            "ASAN_OPTIONS={}",
+            [
+                "detect_leaks=1",
+                "detect_stack_use_after_return=1",
+                "check_initialization_order=1",
+                "strict_init_order=1",
+                "log_path=/tmp/san.log",
+                "abort_on_error=1",
+                "handle_abort=1",
+                "symbolize=0",
+            ]
+            .join(":")
+        ),
+        Sanitizer::Tsan => format!(
+            "TSAN_OPTIONS={}",
+            [
+                "log_path=/tmp/san.log",
+                "halt_on_error=1",
+                "handle_abort=1",
+                "enable_adaptive_delay=1",
+            ]
+            .join(":")
+        ),
+        Sanitizer::Ubsan => format!(
+            "UBSAN_OPTIONS={}",
+            [
+                "log_path=/tmp/san.log",
+                "halt_on_error=1",
+                "handle_abort=1",
+                "print_stacktrace=1",
+                "report_error_type=1",
+            ]
+            .join(":")
+        ),
+        Sanitizer::Msan => format!(
+            "MSAN_OPTIONS={}",
+            [
+                "log_path=/tmp/san.log",
+                "abort_on_error=1",
+                "handle_abort=1",
+                "symbolize=0",
+            ]
+            .join(":")
+        ),
+    };
     let crash_handler_preload = format!("LD_PRELOAD=./{crash_handler_name}");
     let proxy_script = format!(
-        "{asan_options} LD_LIBRARY_PATH=/tmp LD_BIND_NOW=1 {crash_handler_preload} ./bitcoind \\$@{primary_log}",
+        "{sanitizer_options} LD_LIBRARY_PATH=/tmp LD_BIND_NOW=1 {crash_handler_preload} ./bitcoind \\$@{primary_log}",
     );
 
     script.push("echo \"#!/bin/sh\" > ./bitcoind_proxy".to_string());
@@ -121,7 +157,7 @@ pub fn create_nyx_script(
 
     let secondary_arg = if let Some(secondary_bitcoind) = secondary_bitcoind {
         let secondary_proxy_script = format!(
-            "{asan_options} LD_LIBRARY_PATH=/tmp LD_BIND_NOW=1 {crash_handler_preload} ./{secondary_bitcoind} \\$@{secondary_log}",
+            "{sanitizer_options} LD_LIBRARY_PATH=/tmp LD_BIND_NOW=1 {crash_handler_preload} ./{secondary_bitcoind} \\$@{secondary_log}",
         );
         script.push("echo \"#!/bin/sh\" > ./bitcoind2_proxy".to_string());
         script.push(format!(

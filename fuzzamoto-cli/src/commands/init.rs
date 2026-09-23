@@ -1,6 +1,16 @@
 use crate::error::{CliError, Result};
 use crate::utils::{file_ops, nyx, process};
+use clap::ValueEnum;
 use std::path::{Path, PathBuf};
+
+#[derive(ValueEnum, Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum Sanitizer {
+    #[default]
+    Asan,
+    Tsan,
+    Ubsan,
+    Msan,
+}
 
 pub struct InitCommand;
 
@@ -13,6 +23,7 @@ impl InitCommand {
         scenario: &Path,
         nyx_dir: &Path,
         rpc_path: Option<&PathBuf>,
+        sanitizer: Sanitizer,
     ) -> Result<()> {
         file_ops::ensure_sharedir_not_exists(sharedir)?;
         file_ops::create_dir_all(sharedir)?;
@@ -125,6 +136,7 @@ impl InitCommand {
             scenario_name,
             secondary_name,
             rpc_name,
+            sanitizer,
         )?;
 
         Ok(())
