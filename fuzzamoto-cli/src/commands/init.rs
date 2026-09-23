@@ -15,6 +15,7 @@ pub enum Sanitizer {
 pub struct InitCommand;
 
 impl InitCommand {
+    #[allow(clippy::too_many_arguments)]
     pub fn execute(
         sharedir: &Path,
         crash_handler: &Path,
