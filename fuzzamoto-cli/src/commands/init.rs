@@ -23,6 +23,7 @@ impl InitCommand {
         scenario: &Path,
         nyx_dir: &Path,
         rpc_path: Option<&PathBuf>,
+        sanitizer_suppressions: Option<&PathBuf>,
         sanitizer: Sanitizer,
     ) -> Result<()> {
         file_ops::ensure_sharedir_not_exists(sharedir)?;
@@ -39,6 +40,11 @@ impl InitCommand {
         if let Some(rpc) = rpc_path {
             file_ops::ensure_file_exists(rpc)?;
             file_ops::copy_file_to_dir(rpc, sharedir)?;
+        }
+
+        if let Some(suppressions) = sanitizer_suppressions {
+            file_ops::ensure_file_exists(suppressions)?;
+            file_ops::copy_file_to_dir(suppressions, sharedir)?;
         }
 
         let mut all_deps = Vec::new();
@@ -128,6 +134,11 @@ impl InitCommand {
             .and_then(|p| p.file_name())
             .and_then(|name| name.to_str());
 
+        let suppressions_name = sanitizer_suppressions
+            .as_ref()
+            .and_then(|p| p.file_name())
+            .and_then(|name| name.to_str());
+
         nyx::create_nyx_script(
             sharedir,
             &all_deps,
@@ -136,6 +147,7 @@ impl InitCommand {
             scenario_name,
             secondary_name,
             rpc_name,
+            suppressions_name,
             sanitizer,
         )?;
 
